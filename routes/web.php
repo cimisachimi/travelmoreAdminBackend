@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageController;
+
+
 use App\Models\User;
 use App\Models\HolidayPackage;
 use App\Models\Booking;
@@ -20,9 +22,17 @@ Route::get('/dashboard', function () {
             'users' => User::count(),
             'packages' => HolidayPackage::count(),
             'bookings' => Booking::count(),
-        ]
+        ],
+        // Add recent bookings with user and package data
+        'recentBookings' => Booking::with(['user', 'holidayPackage'])
+                                ->latest()
+                                ->take(5)
+                                ->get(),
+        // Add the newest users
+        'newUsers' => User::latest()->take(5)->get(),
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

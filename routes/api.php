@@ -8,7 +8,7 @@ use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\HolidayPackageController as AdminHolidayPackageController;
 use App\Http\Controllers\Api\Public\HolidayPackageController as PublicHolidayPackageController;
 use App\Http\Controllers\Api\BookingController;
-
+use App\Http\Controllers\Api\PaymentController;
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Booking a package
     Route::post('/bookings', [BookingController::class, 'store']);
+    Route::post('/payment/token', [PaymentController::class, 'createTransaction']);
 });
 
 
