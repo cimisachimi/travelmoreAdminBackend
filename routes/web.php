@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageCo
 use App\Http\Controllers\Admin\TripPlannerController as AdminTripPlannerController;
 use App\Http\Controllers\Admin\TransactionController as AdminTransactionController;
 use App\Http\Controllers\Admin\ServiceController as AdminServiceController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -48,6 +50,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('admin.planners.index');
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('admin.transactions.index');
         Route::get('/services', [AdminServiceController::class, 'index'])->name('admin.services.index');
+        Route::get('/orders', [AdminOrderController::class, 'index'])->name('admin.orders.index');
     });
 });
 

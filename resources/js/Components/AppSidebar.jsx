@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 // Add 'Shapes' to this import line
-import { Home, Package, Users, FileText, CreditCard, Shapes, User as UserIcon } from 'lucide-react';
+import { Home, Package, Users, FileText, CreditCard, Shapes, ShoppingCart, User as UserIcon } from 'lucide-react'; // Add ShoppingCart icon
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
 import {
@@ -17,7 +17,7 @@ import {
 
 const menuItems = [
   { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home },
-
+  { name: 'admin.orders.index', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
   { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
   { name: 'admin.services.index', title: "Services", url: route('admin.services.index'), icon: Shapes },
   { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
