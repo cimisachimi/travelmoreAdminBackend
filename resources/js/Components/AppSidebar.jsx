@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
-// Add CreditCard to this import line
-import { Home, Package, Users, FileText, CreditCard, User as UserIcon } from 'lucide-react';
+// Add 'Shapes' to this import line
+import { Home, Package, Users, FileText, CreditCard, Shapes, User as UserIcon } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
 import {
@@ -17,10 +17,11 @@ import {
 
 const menuItems = [
   { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home },
-  { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
-  { name: 'admin.packages.index', title: "Packages", url: route('admin.packages.index'), icon: Package },
+
   { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
+  { name: 'admin.services.index', title: "Services", url: route('admin.services.index'), icon: Shapes },
   { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
+  { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
 ];
 
 export function AppSidebar({ user }) {
