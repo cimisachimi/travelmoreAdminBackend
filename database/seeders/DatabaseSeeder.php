@@ -16,8 +16,9 @@ class DatabaseSeeder extends Seeder
         // ... any other seeders you have
 
         $this->call([
-            //HolidayPackageSeeder::class, // Add this line
-            TripPlannerSeeder::class, // Add this line
+            HolidayPackageSeeder::class,
+            TripPlannerSeeder::class,
+            TransactionSeeder::class, // Add this line
         ]);
     }
 }
