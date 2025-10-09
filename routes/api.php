@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Admin\HolidayPackageController as AdminHolidayPacka
 use App\Http\Controllers\Api\Public\HolidayPackageController as PublicHolidayPackageController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\TripPlannerController;
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -20,7 +21,7 @@ use App\Http\Controllers\Api\PaymentController;
 
 Route::get('/packages', [PublicHolidayPackageController::class, 'index']);
 Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class, 'show']);
-
+Route::post('/trip-planners', [TripPlannerController::class, 'store']);
 
 /*
 |--------------------------------------------------------------------------

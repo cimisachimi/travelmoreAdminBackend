@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
-import { Home, Package, Users, User as UserIcon } from 'lucide-react';
+// Add FileText to this import line
+import { Home, Package, Users, FileText, User as UserIcon } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
 import {
@@ -18,6 +19,7 @@ const menuItems = [
   { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home },
   { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
   { name: 'admin.packages.index', title: "Packages", url: route('admin.packages.index'), icon: Package },
+  { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
 ];
 
 export function AppSidebar({ user }) {
@@ -30,7 +32,6 @@ export function AppSidebar({ user }) {
           <ApplicationLogo className="h-6 w-6" />
           {!isCollapsed && <span className="text-lg font-semibold">TravelMore</span>}
         </div>
-        {/* The trigger button has been removed from here */}
       </SidebarHeader>
 
       <SidebarContent>

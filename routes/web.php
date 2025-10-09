@@ -5,11 +5,13 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageController;
+use App\Http\Controllers\Admin\TripPlannerController as AdminTripPlannerController;
 
-
+// Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
 use App\Models\Booking;
+use App\Models\TripPlanner; // <-- ADD THIS LINE
 
 // Redirect the root URL to the login page
 Route::get('/', function () {
@@ -22,14 +24,14 @@ Route::get('/dashboard', function () {
             'users' => User::count(),
             'packages' => HolidayPackage::count(),
             'bookings' => Booking::count(),
+            'planners' => TripPlanner::count(),
         ],
-        // Add recent bookings with user and package data
         'recentBookings' => Booking::with(['user', 'holidayPackage'])
                                 ->latest()
                                 ->take(5)
                                 ->get(),
-        // Add the newest users
         'newUsers' => User::latest()->take(5)->get(),
+        'recentPlanners' => TripPlanner::latest()->take(5)->get(),
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -42,6 +44,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index'])->name('admin.users.index');
         Route::get('/holiday-packages', [AdminHolidayPackageController::class, 'index'])->name('admin.packages.index');
+        Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('admin.planners.index');
     });
 });
 
