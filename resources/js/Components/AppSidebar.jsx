@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 // Add 'Shapes' to this import line
-import { Home, Package, Users, FileText, CreditCard, Shapes, ShoppingCart, User as UserIcon } from 'lucide-react'; // Add ShoppingCart icon
+import { Home, Package, Users, FileText, CreditCard, Shapes, ShoppingCart, User as UserIcon, Car, Activity } from 'lucide-react'; // Add ShoppingCart icon
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
 import {
@@ -19,7 +19,9 @@ const menuItems = [
   { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home },
   { name: 'admin.orders.index', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
   { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
-  { name: 'admin.services.index', title: "Services", url: route('admin.services.index'), icon: Shapes },
+  { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
+  { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
+  { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
   { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
   { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
 ];

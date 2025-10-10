@@ -9,7 +9,8 @@ use App\Http\Controllers\Admin\TripPlannerController as AdminTripPlannerControll
 use App\Http\Controllers\Admin\TransactionController as AdminTransactionController;
 use App\Http\Controllers\Admin\ServiceController as AdminServiceController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
-
+use App\Http\Controllers\Admin\CarRentalController as AdminCarRentalController;
+use App\Http\Controllers\Admin\ActivityController as AdminActivityController;
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -50,6 +51,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('admin.planners.index');
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('admin.transactions.index');
         Route::get('/services', [AdminServiceController::class, 'index'])->name('admin.services.index');
+        Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('admin.rentals.index');
+        Route::get('/activities', [AdminActivityController::class, 'index'])->name('admin.activities.index');
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('admin.orders.index');
     });
 });
