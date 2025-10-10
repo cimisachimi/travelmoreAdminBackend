@@ -51,7 +51,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('admin.planners.index');
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('admin.transactions.index');
         Route::get('/services', [AdminServiceController::class, 'index'])->name('admin.services.index');
+
         Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('admin.rentals.index');
+       //Route::get('/car-rentals/create', [AdminCarRentalController::class, 'create'])->name('admin.rentals.create'); // Add this line
+        Route::post('/car-rentals', [AdminCarRentalController::class, 'store'])->name('admin.rentals.store'); // Add this line
+        Route::get('/car-rentals/{carRental}/availability', [AdminCarRentalController::class, 'getAvailability'])->name('admin.rentals.availability');
+        Route::put('/car-rentals/availability/{availability}', [AdminCarRentalController::class, 'updateAvailability'])->name('admin.rentals.availability.update');    
         Route::get('/activities', [AdminActivityController::class, 'index'])->name('admin.activities.index');
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('admin.orders.index');
     });

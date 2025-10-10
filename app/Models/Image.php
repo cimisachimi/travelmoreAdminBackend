@@ -11,6 +11,9 @@ class Image extends Model
 
     protected $fillable = ['url', 'type'];
 
+    /**
+     * Get the parent imageable model (car rental, activity, etc.).
+     */
     public function imageable()
     {
         return $this->morphTo();

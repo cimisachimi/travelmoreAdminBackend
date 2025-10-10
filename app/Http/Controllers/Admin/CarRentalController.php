@@ -6,65 +6,66 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\CarRental;
+use Carbon\Carbon;
 
 class CarRentalController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        $carRentals = CarRental::latest()->paginate(10);
+        // Set default values if the request doesn't have them
+        $year = $request->query('year', Carbon::now()->format('Y'));
+        $month = $request->query('month', Carbon::now()->format('m'));
+
+        $carRentals = CarRental::with(['images', 'availabilities' => function ($query) use ($month, $year) {
+            $query->whereYear('date', $year)->whereMonth('date', $month);
+        }])
+        ->latest()
+        ->paginate(10)
+        ->withQueryString(); // Appends the query string to pagination links
+
         return Inertia::render('Admin/CarRental/Index', [
-            'carRentals' => $carRentals
+            'carRentals' => $carRentals,
+            // This 'filters' array is now ALWAYS sent to the frontend
+            'filters' => [
+                'year' => $year,
+                'month' => $month,
+            ]
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
+    // ... The store() method remains unchanged ...
     public function store(Request $request)
     {
-        //
-    }
+        $request->validate([
+            'car_model' => 'required|string|max:255',
+            'brand' => 'required|string|max:255',
+            'price_per_day' => 'required|numeric',
+            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'gallery.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
+        ]);
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
+        $carRental = CarRental::create($request->only('car_model', 'brand', 'price_per_day'));
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
+        if ($request->hasFile('thumbnail')) {
+            $path = $request->file('thumbnail')->store('images/thumbnails', 'public');
+            $carRental->images()->create(['url' => $path, 'type' => 'thumbnail']);
+        }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
+        if ($request->hasFile('gallery')) {
+            foreach ($request->file('gallery') as $file) {
+                $path = $file->store('images/gallery', 'public');
+                $carRental->images()->create(['url' => $path, 'type' => 'gallery']);
+            }
+        }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        $startDate = Carbon::today();
+        for ($i = 0; $i < 365; $i++) {
+            $carRental->availabilities()->create([
+                'date' => $startDate->copy()->addDays($i),
+                'status' => 'available'
+            ]);
+        }
+
+        return redirect()->route('admin.rentals.index')->with('success', 'Car rental created successfully.');
     }
 }
