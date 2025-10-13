@@ -15,9 +15,10 @@ use App\Http\Controllers\Admin\ActivityController as AdminActivityController;
 use App\Models\User;
 use App\Models\HolidayPackage;
 use App\Models\Booking;
-use App\Models\TripPlanner; // <-- ADD THIS LINE
+use App\Models\TripPlanner;
 
-// Redirect the root URL to the login page
+// ... (other routes like '/' and '/dashboard' stay the same) ...
+
 Route::get('/', function () {
     return redirect()->route('login');
 });
@@ -39,26 +40,29 @@ Route::get('/dashboard', function () {
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Admin-only routes for the dashboard pages
-    Route::prefix('admin')->middleware('admin')->group(function () {
-        Route::get('/users', [AdminUserController::class, 'index'])->name('admin.users.index');
-        Route::get('/holiday-packages', [AdminHolidayPackageController::class, 'index'])->name('admin.packages.index');
-        Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('admin.planners.index');
-        Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('admin.transactions.index');
-        Route::get('/services', [AdminServiceController::class, 'index'])->name('admin.services.index');
+    // --- REVISED ADMIN ROUTES ---
+    // The name('admin.') automatically adds the 'admin.' prefix to every route inside this group.
+    Route::prefix('admin')->middleware('admin')->name('admin.')->group(function () {
+        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        Route::get('/holiday-packages', [AdminHolidayPackageController::class, 'index'])->name('packages.index');
+        Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index');
+        Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('transactions.index');
+        Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index');
+        Route::get('/activities', [AdminActivityController::class, 'index'])->name('activities.index');
+        Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
 
-        Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('admin.rentals.index');
-       //Route::get('/car-rentals/create', [AdminCarRentalController::class, 'create'])->name('admin.rentals.create'); // Add this line
-        Route::post('/car-rentals', [AdminCarRentalController::class, 'store'])->name('admin.rentals.store'); // Add this line
-        Route::get('/car-rentals/{carRental}/availability', [AdminCarRentalController::class, 'getAvailability'])->name('admin.rentals.availability');
-        Route::put('/car-rentals/availability/{availability}', [AdminCarRentalController::class, 'updateAvailability'])->name('admin.rentals.availability.update');    
-        Route::get('/activities', [AdminActivityController::class, 'index'])->name('admin.activities.index');
-        Route::get('/orders', [AdminOrderController::class, 'index'])->name('admin.orders.index');
+
+        Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('rentals.index');
+        Route::post('/car-rentals', [AdminCarRentalController::class, 'store'])->name('rentals.store');
+        Route::post('/car-rentals/{id}/availability', [AdminCarRentalController::class, 'update_availability'])->name('rentals.update_availability');
+        Route::delete('/car-rentals/{id}', [AdminCarRentalController::class, 'destroy'])->name('rentals.destroy');
+
     });
 });
 

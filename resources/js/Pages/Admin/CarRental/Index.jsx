@@ -1,26 +1,50 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head, useForm, router } from "@inertiajs/react";
-import { useState, useEffect } from "react";
+import { Head, useForm, router, Link } from "@inertiajs/react";
+import { useState } from "react";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle
 } from "@/Components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/Components/ui/table";
-import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose
 } from "@/Components/ui/dialog";
 import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
-import { Calendar as CalendarIcon } from "lucide-react";
 import AvailabilityCalendar from "@/Components/AvailabilityCalendar";
+import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import DangerButton from "@/Components/DangerButton";
+
+// Component for Pagination Links
+const Pagination = ({ links }) => (
+  <div className="mt-4 flex justify-center">
+    {links.map((link, key) => (
+      link.url ? (
+        <Link
+          key={key}
+          href={link.url}
+          className={`px-4 py-2 mx-1 border rounded-md ${link.active ? 'bg-blue-500 text-white' : 'bg-white'}`}
+          dangerouslySetInnerHTML={{ __html: link.label }}
+        />
+      ) : (
+        <div
+          key={key}
+          className="px-4 py-2 mx-1 border rounded-md text-gray-400"
+          dangerouslySetInnerHTML={{ __html: link.label }}
+        />
+      )
+    ))}
+  </div>
+);
+
 
 export default function Index({ auth, carRentals, filters }) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCar, setSelectedCar] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date(filters.year, filters.month - 1));
 
@@ -32,29 +56,7 @@ export default function Index({ auth, carRentals, filters }) {
     gallery: [],
   });
 
-  // Reset month when the calendar dialog is closed to ensure it opens with the default month next time.
-  useEffect(() => {
-    if (!isCalendarOpen) {
-      setCurrentMonth(new Date(filters.year, filters.month - 1));
-    }
-  }, [isCalendarOpen]);
-
-  // This is the core Inertia logic for updating the calendar data.
-  // It makes a partial request to the server, only asking for the props that have changed.
-  const handleMonthChange = (newMonth) => {
-    setCurrentMonth(newMonth);
-    router.get(route('admin.rentals.index'), {
-      month: newMonth.getMonth() + 1,
-      year: newMonth.getFullYear(),
-    }, {
-      preserveState: true,
-      preserveScroll: true,
-      replace: true,
-      only: ['carRentals', 'filters'], // This is the key to efficient updates
-    });
-  };
-
-  const submit = (e) => {
+  const submitCreate = (e) => {
     e.preventDefault();
     post(route("admin.rentals.store"), {
       onSuccess: () => {
@@ -64,12 +66,26 @@ export default function Index({ auth, carRentals, filters }) {
     });
   };
 
-  const openCalendar = (car) => {
-    // Find the specific car rental data from the main prop to ensure the calendar gets the latest availability info
-    const carWithAvailability = carRentals.data.find(c => c.id === car.id);
-    setSelectedCar(carWithAvailability);
-    setIsCalendarOpen(true);
+  const openEditor = (car) => {
+    const fullCarData = carRentals.data.find(c => c.id === car.id);
+    setSelectedCar(fullCarData);
+    setIsEditorOpen(true);
   };
+
+  const openDeleteDialog = (car) => {
+    setSelectedCar(car);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const deleteCar = (e) => {
+    e.preventDefault();
+    router.delete(route('admin.rentals.destroy', { id: selectedCar.id }), {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false);
+        setSelectedCar(null);
+      }
+    });
+  }
 
   return (
     <AuthenticatedLayout
@@ -83,17 +99,16 @@ export default function Index({ auth, carRentals, filters }) {
       <Head title="Car Rentals" />
 
       <div className="py-12">
-        <div className="max-w-7xl mx-auto sm:px-6 lg-px-8">
-          {/* --- Create Car Rental Dialog --- */}
+        <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
+          {/* --- Create Car Dialog --- */}
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            {/* *** THIS IS THE FIX *** */}
+            {/* The form content has been restored inside the DialogContent */}
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Add a New Car Rental</DialogTitle>
-                <DialogDescription>
-                  Fill out the form to add a new car to your rental fleet.
-                </DialogDescription>
               </DialogHeader>
-              <form onSubmit={submit} className="space-y-4">
+              <form onSubmit={submitCreate} className="space-y-4">
                 <div>
                   <Label htmlFor="car_model">Car Model</Label>
                   <Input id="car_model" value={data.car_model} onChange={(e) => setData("car_model", e.target.value)} />
@@ -120,79 +135,99 @@ export default function Index({ auth, carRentals, filters }) {
                   <InputError message={errors.gallery} className="mt-2" />
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={processing}>
-                    Create Car Rental
-                  </Button>
+                  <Button type="submit" disabled={processing}>Create Car</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
 
-          {/* --- Availability Calendar Dialog --- */}
-          <Dialog open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-            <DialogContent className="sm:max-w-2xl">
+          {/* --- Availability Editor Dialog --- */}
+          <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+            <DialogContent className="sm:max-w-xl">
               <DialogHeader>
-                <DialogTitle>Availability for {selectedCar?.car_model}</DialogTitle>
+                <DialogTitle>Edit Availability for {selectedCar?.brand} {selectedCar?.car_model}</DialogTitle>
               </DialogHeader>
               {selectedCar && (
                 <AvailabilityCalendar
                   carRental={selectedCar}
                   month={currentMonth}
-                  onMonthChange={handleMonthChange}
+                  onMonthChange={setCurrentMonth}
                 />
               )}
             </DialogContent>
           </Dialog>
 
+          {/* --- Delete Confirmation Dialog --- */}
+          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Are you sure?</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete <strong>{selectedCar?.brand} {selectedCar?.car_model}</strong>.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                <DangerButton onClick={deleteCar}>Delete</DangerButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Car Rentals</CardTitle>
-                  <CardDescription>A list of all the car rentals in your fleet.</CardDescription>
+                  <CardTitle>Manage Your Fleet</CardTitle>
+                  <CardDescription>A list of all cars in your rental fleet.</CardDescription>
                 </div>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>Create Car Rental</Button>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add New Car
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Thumbnail</TableHead>
-                    <TableHead>Car Model</TableHead>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Price Per Day</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Car</TableHead>
+                    <TableHead>Price</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {carRentals.data.map((carRental) => (
-                    <TableRow key={carRental.id}>
+                  {carRentals.data.map((car) => (
+                    <TableRow key={car.id}>
                       <TableCell>
-                        <img
-                          src={`/storage/${carRental.images.find(img => img.type === 'thumbnail')?.url}`}
-                          alt={carRental.car_model}
-                          className="w-16 h-16 object-cover rounded"
-                        />
+                        <div className="flex items-center gap-4">
+                          <img
+                            src={`/storage/${car.images.find(img => img.type === 'thumbnail')?.url}`}
+                            alt={car.car_model}
+                            className="w-16 h-12 object-cover rounded-md"
+                          />
+                          <div>
+                            <p className="font-bold">{car.brand} {car.car_model}</p>
+                          </div>
+                        </div>
                       </TableCell>
-                      <TableCell className="font-medium">{carRental.car_model}</TableCell>
-                      <TableCell>{carRental.brand}</TableCell>
                       <TableCell>
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(carRental.price_per_day)}
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(car.price_per_day)}
                       </TableCell>
-                      <TableCell>
-                        <Badge>{carRental.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="icon" onClick={() => openCalendar(carRental)}>
-                          <CalendarIcon className="h-4 w-4" />
+                      <TableCell className="text-right space-x-2">
+                        <Button variant="outline" onClick={() => openEditor(car)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Availability
+                        </Button>
+                        <Button variant="destructive" size="icon" onClick={() => openDeleteDialog(car)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <Pagination links={carRentals.links} />
             </CardContent>
           </Card>
         </div>
