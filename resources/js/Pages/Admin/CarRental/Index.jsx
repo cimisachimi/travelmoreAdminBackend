@@ -215,6 +215,11 @@ export default function Index({ auth, carRentals, filters }) {
                         {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(car.price_per_day)}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
+                        <Link href={route('admin.rentals.show', car.id)}>
+                          <Button variant="outline">
+                            View Details
+                          </Button>
+                        </Link>
                         <Button variant="outline" onClick={() => openEditor(car)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Edit Availability
@@ -223,6 +228,7 @@ export default function Index({ auth, carRentals, filters }) {
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
+
                     </TableRow>
                   ))}
                 </TableBody>

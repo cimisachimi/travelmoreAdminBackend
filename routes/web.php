@@ -40,7 +40,9 @@ Route::get('/dashboard', function () {
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-
+Route::middleware(['web', 'auth:sanctum'])->get('/user', function (Request $request) {
+    return $request->user();
+});
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -57,12 +59,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/activities', [AdminActivityController::class, 'index'])->name('activities.index');
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
 
-
+        Route::get('/car-rentals/{id}', [AdminCarRentalController::class, 'show'])->name('rentals.show');
         Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('rentals.index');
         Route::post('/car-rentals', [AdminCarRentalController::class, 'store'])->name('rentals.store');
         Route::post('/car-rentals/{id}/availability', [AdminCarRentalController::class, 'update_availability'])->name('rentals.update_availability');
         Route::delete('/car-rentals/{id}', [AdminCarRentalController::class, 'destroy'])->name('rentals.destroy');
-
+        
+        Route::put('/car-rentals/{id}', [AdminCarRentalController::class, 'update'])->name('rentals.update');
+        Route::post('/car-rentals/{id}/images', [AdminCarRentalController::class, 'storeImage'])->name('rentals.images.store');
+        Route::delete('/car-rentals/{carRentalId}/images/{imageId}', [AdminCarRentalController::class, 'destroyImage'])->name('rentals.images.destroy');
     });
 });
 

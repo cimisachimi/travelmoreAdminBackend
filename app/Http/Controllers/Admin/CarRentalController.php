@@ -36,6 +36,17 @@ class CarRentalController extends Controller
             ]
         ]);
     }
+    public function show(Request $request, $id)
+{
+    $carRental = CarRental::with(['images', 'availabilities'])->findOrFail($id);
+
+    // Add any other data you want to pass to the details page
+    // For example, you could fetch recent bookings for this car here.
+
+    return Inertia::render('Admin/CarRental/Show', [
+        'carRental' => $carRental,
+    ]);
+}
 
     // ... all other methods (store, update_availability, destroy) remain unchanged ...
     
@@ -103,4 +114,57 @@ class CarRentalController extends Controller
         $carRental->delete();
         return redirect()->route('admin.rentals.index')->with('success', 'Car rental deleted successfully.');
     }
+
+    public function update(Request $request, $id)
+{
+    $request->validate([
+        'car_model' => 'required|string|max:255',
+        'brand' => 'required|string|max:255',
+        'price_per_day' => 'required|numeric',
+    ]);
+
+    $carRental = CarRental::findOrFail($id);
+    $carRental->update($request->only('car_model', 'brand', 'price_per_day'));
+
+    return back()->with('success', 'Car details updated successfully.');
+}
+
+/**
+ * Store a new gallery image for the specified car rental.
+ */
+public function storeImage(Request $request, $id)
+{
+    $request->validate([
+        'gallery' => 'required|array',
+        'gallery.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048'
+    ]);
+
+    $carRental = CarRental::findOrFail($id);
+
+    if ($request->hasFile('gallery')) {
+        foreach ($request->file('gallery') as $file) {
+            $path = $file->store('images/gallery', 'public');
+            $carRental->images()->create(['url' => $path, 'type' => 'gallery']);
+        }
+    }
+
+    return back()->with('success', 'Gallery images uploaded successfully.');
+}
+
+/**
+ * Remove the specified image from storage.
+ */
+public function destroyImage($carRentalId, $imageId)
+{
+    // Ensure the image belongs to the car rental for security
+    $carRental = CarRental::findOrFail($carRentalId);
+    $image = $carRental->images()->findOrFail($imageId);
+
+    // Optional: Delete the actual file from storage
+    // Storage::disk('public')->delete($image->url);
+
+    $image->delete();
+
+    return back()->with('success', 'Image deleted successfully.');
+}
 }

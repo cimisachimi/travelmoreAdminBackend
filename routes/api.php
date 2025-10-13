@@ -29,6 +29,8 @@ use App\Http\Controllers\Api\Admin\HolidayPackageController as AdminHolidayPacka
 |
 */
 
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
 // Holiday Packages
 Route::get('/packages', [PublicHolidayPackageController::class, 'index']);
 Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class, 'show']);
