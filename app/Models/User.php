@@ -6,11 +6,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens; // ✅ Import the HasApiTokens trait
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasApiTokens; // ✅ Use the trait here
 
     /**
      * The attributes that are mass assignable.
@@ -23,9 +24,10 @@ class User extends Authenticatable
         'password',
         'role', // Add role here
     ];
+    
     public const ROLE_ADMIN = 'admin';
     public const ROLE_CLIENT = 'client';
-    
+
     public function isAdmin(): bool
     {
         return $this->role === self::ROLE_ADMIN;

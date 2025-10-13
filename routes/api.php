@@ -4,7 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // --- Controller Imports ---
-
+// Client Auth Controller
+use App\Http\Controllers\Api\Client\LoginController;
 // Public Controllers
 use App\Http\Controllers\Api\Public\HolidayPackageController as PublicHolidayPackageController;
 use App\Http\Controllers\Api\Public\CarRentalController as PublicCarRentalController;
@@ -29,8 +30,9 @@ use App\Http\Controllers\Api\Admin\HolidayPackageController as AdminHolidayPacka
 |
 */
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+
+Route::post('/register', [LoginController::class, 'register']);
+Route::post('/login', [LoginController::class, 'login']);
 // Holiday Packages
 Route::get('/packages', [PublicHolidayPackageController::class, 'index']);
 Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class, 'show']);
@@ -57,6 +59,8 @@ Route::post('/trip-planners', [TripPlannerController::class, 'store']);
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [LoginController::class, 'logout']);
+
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
