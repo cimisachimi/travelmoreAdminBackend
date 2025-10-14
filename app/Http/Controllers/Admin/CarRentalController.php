@@ -116,19 +116,24 @@ class CarRentalController extends Controller
     }
 
     public function update(Request $request, $id)
-{
-    $request->validate([
-        'car_model' => 'required|string|max:255',
-        'brand' => 'required|string|max:255',
-        'price_per_day' => 'required|numeric',
-    ]);
+    {
+        $carRental = CarRental::findOrFail($id);
 
-    $carRental = CarRental::findOrFail($id);
-    $carRental->update($request->only('car_model', 'brand', 'price_per_day'));
+        // ✅ Add validation for the new fields from your form
+        $validatedData = $request->validate([
+            'brand' => 'required|string|max:255',
+            'car_model' => 'required|string|max:255',
+            'price_per_day' => 'required|numeric|min:0',
+            'description' => 'nullable|string', // Validate the description
+            'availability' => 'required|integer|min:0',
+            'status' => 'required|in:available,unavailable,maintenance',
+        ]);
 
-    return back()->with('success', 'Car details updated successfully.');
-}
+        // ✅ Update the model with the validated data
+        $carRental->update($validatedData);
 
+        return back()->with('success', 'Car details updated successfully.');
+    }
 /**
  * Store a new gallery image for the specified car rental.
  */

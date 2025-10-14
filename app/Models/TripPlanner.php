@@ -9,25 +9,27 @@ class TripPlanner extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
-    protected $guarded = ['id']; // A convenient way to make all fields fillable
+    protected $fillable = [
+        'user_id', // ✅ Add this
+        'type', 'trip_type', 'full_name', 'email', 'phone', 'company_name',
+        'brand_name', 'province', 'city', 'address', 'postal_code', 'country',
+        'pax_adults', 'pax_teens', 'pax_kids', 'pax_seniors', 'departure_date',
+        'duration', 'budget_pack', 'addons', 'budget_priorities', 'travel_style',
+        'travel_personality', 'must_visit', 'attraction_preference', 'food_preference',
+        'accommodation_preference', 'consent', 'is_frequent_traveler', 'travel_type',
+    ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'addons' => 'array',
         'budget_priorities' => 'array',
         'travel_style' => 'array',
         'travel_personality' => 'array',
         'food_preference' => 'array',
-        'departure_date' => 'date',
         'consent' => 'boolean',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

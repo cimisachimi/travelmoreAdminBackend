@@ -9,55 +9,36 @@ use Illuminate\Http\Request;
 class TripPlannerController extends Controller
 {
     /**
-     * Store a newly created trip planner submission.
+     * Get the authenticated user's trip planner data.
+     */
+    public function show(Request $request)
+    {
+        $planner = $request->user()->tripPlanner()->first();
+
+        if (!$planner) {
+            // It's okay if a user doesn't have a plan yet.
+            // Return a null response so the frontend knows to show a blank form.
+            return response()->json(null, 200);
+        }
+
+        return response()->json($planner);
+    }
+
+    /**
+     * Create or update a trip planner for the authenticated user.
      */
     public function store(Request $request)
     {
-        // Laravel's validation is powerful. This ensures the data is clean.
-        $validatedData = $request->validate([
-            'type' => 'required|string|in:personal,company',
-            'tripType' => 'required|string|in:domestic,foreign',
-            'fullName' => 'nullable|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone' => 'required|string|max:255',
-            'companyName' => 'nullable|string|max:255',
-            'brandName' => 'nullable|string|max:255',
-            'province' => 'nullable|string|max:255',
-            'city' => 'nullable|string|max:255',
-            'address' => 'nullable|string',
-            'postalCode' => 'nullable|string|max:255',
-            'country' => 'nullable|string|max:255',
-            'paxAdults' => 'required|integer|min:0',
-            'paxTeens' => 'required|integer|min:0',
-            'paxKids' => 'required|integer|min:0',
-            'paxSeniors' => 'required|integer|min:0',
-            'departureDate' => 'nullable|date',
-            'duration' => 'nullable|string|max:255',
-            'travelType' => 'required|string|max:255',
-            'budgetPack' => 'required|string|max:255',
-            'addons' => 'nullable|array',
-            'budgetPriorities' => 'nullable|array',
-            'travelStyle' => 'nullable|array',
-            'travelPersonality' => 'nullable|array',
-            'mustVisit' => 'nullable|string',
-            'attractionPreference' => 'nullable|string',
-            'foodPreference' => 'nullable|array',
-            'accommodationPreference' => 'nullable|string',
-            'consent' => 'required|boolean',
-            'isFrequentTraveler' => 'required|string|max:255',
-        ]);
+        $user = $request->user();
         
-        // The field name in the request is 'tripType', but our column is 'trip_type'
-        // We'll manually map it before creation.
-        $validatedData['trip_type'] = $validatedData['tripType'];
-        unset($validatedData['tripType']);
+        // This is a powerful Eloquent method that finds a record
+        // based on the first array, and if it exists, updates it
+        // with the second array. If not, it creates a new one.
+        $planner = TripPlanner::updateOrCreate(
+            ['user_id' => $user->id], // The key to find the record by
+            $request->all()          // The data to update or create with
+        );
 
-        // Create a new record in the database
-        $tripPlanner = TripPlanner::create($validatedData);
-
-        return response()->json([
-            'message' => 'Trip planner submitted successfully!',
-            'data' => $tripPlanner
-        ], 201);
+        return response()->json($planner, 200);
     }
 }

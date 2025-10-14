@@ -4,15 +4,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/Com
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
+import { Textarea } from "@/Components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import InputError from "@/Components/InputError";
 import { ArrowLeft, Edit, Trash2, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/Components/ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/Components/ui/tooltip";
+// ✅ FIXED: Added isSameMonth to the import
 import { format, getYear, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, getMonth, isSameMonth } from 'date-fns';
 import { router } from "@inertiajs/react";
 import { useState, useMemo } from "react";
 import AvailabilityCalendar from "@/Components/AvailabilityCalendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/Components/ui/dialog";
+import { Badge } from "@/Components/ui/badge";
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -49,9 +53,7 @@ const YearlyCalendar = ({ availabilities }) => {
             <h3 className="font-semibold text-center mb-3">{format(month, 'MMMM')}</h3>
             <div className="grid grid-cols-7 gap-1 text-center text-xs">
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <div key={`${day}-${index}`} className="font-bold text-muted-foreground">{day}</div>)}
-
               {Array.from({ length: startingDayIndex }).map((_, i) => <div key={`empty-${i}`} />)}
-
               {daysInMonthGrid.map(day => {
                 const dateString = format(day, 'yyyy-MM-dd');
                 const status = availabilityMap.get(dateString) || 'default';
@@ -88,9 +90,12 @@ const YearlyCalendar = ({ availabilities }) => {
 // --- Edit Form Component ---
 const EditCarForm = ({ carRental }) => {
   const { data, setData, put, processing, errors } = useForm({
-    brand: carRental.brand,
-    car_model: carRental.car_model,
-    price_per_day: carRental.price_per_day,
+    brand: carRental.brand || '',
+    car_model: carRental.car_model || '',
+    price_per_day: carRental.price_per_day || '',
+    description: carRental.description || '',
+    availability: carRental.availability || 0,
+    status: carRental.status || 'unavailable',
   });
 
   const submit = (e) => {
@@ -99,21 +104,49 @@ const EditCarForm = ({ carRental }) => {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div>
-        <Label htmlFor="brand">Brand</Label>
-        <Input id="brand" value={data.brand} onChange={e => setData('brand', e.target.value)} />
-        <InputError message={errors.brand} className="mt-2" />
+    <form onSubmit={submit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="brand">Brand</Label>
+          <Input id="brand" value={data.brand} onChange={e => setData('brand', e.target.value)} />
+          <InputError message={errors.brand} className="mt-2" />
+        </div>
+        <div>
+          <Label htmlFor="car_model">Car Model</Label>
+          <Input id="car_model" value={data.car_model} onChange={e => setData('car_model', e.target.value)} />
+          <InputError message={errors.car_model} className="mt-2" />
+        </div>
       </div>
       <div>
-        <Label htmlFor="car_model">Car Model</Label>
-        <Input id="car_model" value={data.car_model} onChange={e => setData('car_model', e.target.value)} />
-        <InputError message={errors.car_model} className="mt-2" />
+        <Label htmlFor="description">Description</Label>
+        <Textarea id="description" value={data.description} onChange={e => setData('description', e.target.value)} rows={5} />
+        <InputError message={errors.description} className="mt-2" />
       </div>
-      <div>
-        <Label htmlFor="price_per_day">Price Per Day (IDR)</Label>
-        <Input id="price_per_day" type="number" value={data.price_per_day} onChange={e => setData('price_per_day', e.target.value)} />
-        <InputError message={errors.price_per_day} className="mt-2" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="price_per_day">Price Per Day (IDR)</Label>
+          <Input id="price_per_day" type="number" value={data.price_per_day} onChange={e => setData('price_per_day', e.target.value)} />
+          <InputError message={errors.price_per_day} className="mt-2" />
+        </div>
+        <div>
+          <Label htmlFor="availability">Availability (Units)</Label>
+          <Input id="availability" type="number" value={data.availability} onChange={e => setData('availability', e.target.value)} />
+          <InputError message={errors.availability} className="mt-2" />
+        </div>
+        <div>
+          <Label htmlFor="status">Status</Label>
+          <Select onValueChange={(value) => setData('status', value)} defaultValue={data.status}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="unavailable">Unavailable</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+            </SelectContent>
+          </Select>
+          <InputError message={errors.status} className="mt-2" />
+        </div>
       </div>
       <Button type="submit" disabled={processing}>Save Changes</Button>
     </form>
@@ -155,18 +188,22 @@ const GalleryManager = ({ carRental }) => {
       </div>
       <div>
         <h3 className="text-lg font-medium">Current Gallery</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          {carRental.images.filter(img => img.type === 'gallery').map(image => (
-            <div key={image.id} className="relative group">
-              <img src={`/storage/${image.url}`} className="w-full h-auto object-cover rounded-lg aspect-square" />
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="destructive" size="icon" onClick={() => deleteImage(image.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+        {carRental.images.filter(img => img.type === 'gallery').length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            {carRental.images.filter(img => img.type === 'gallery').map(image => (
+              <div key={image.id} className="relative group">
+                <img src={`/storage/${image.url}`} className="w-full h-auto object-cover rounded-lg aspect-square" />
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="destructive" size="icon" onClick={() => deleteImage(image.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground mt-4">No gallery images uploaded.</p>
+        )}
       </div>
     </div>
   );
@@ -187,6 +224,14 @@ export default function Show({ auth, carRental }) {
     };
   }, [carRental, currentMonth]);
 
+  const getStatusVariant = (status) => {
+    switch (status) {
+      case 'available': return 'success';
+      case 'maintenance': return 'warning';
+      default: return 'destructive';
+    }
+  };
+
   return (
     <AuthenticatedLayout
       user={auth.user}
@@ -206,7 +251,7 @@ export default function Show({ auth, carRental }) {
       <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Edit Availability</DialogTitle>
+            <DialogTitle>Edit Monthly Availability</DialogTitle>
           </DialogHeader>
           {carRentalForEditor && (
             <AvailabilityCalendar
@@ -221,12 +266,16 @@ export default function Show({ auth, carRental }) {
       <div className="py-12">
         <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between">
+            <CardHeader className="flex flex-col md:flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle className="text-2xl">{carRental.brand} {carRental.car_model}</CardTitle>
-                <CardDescription>
-                  {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(carRental.price_per_day)} / day
-                </CardDescription>
+                <div className="flex items-center gap-4 mt-2">
+                  <CardDescription>
+                    {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(carRental.price_per_day)} / day
+                  </CardDescription>
+                  <Badge variant={getStatusVariant(carRental.status)} className="capitalize">{carRental.status}</Badge>
+                  <span className="text-sm text-muted-foreground">{carRental.availability} units available</span>
+                </div>
               </div>
               <Button variant="outline" onClick={() => setIsEditorOpen(true)}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -235,7 +284,7 @@ export default function Show({ auth, carRental }) {
             </CardHeader>
             <CardContent>
               <img
-                src={`/storage/${carRental.images.find(img => img.type === 'thumbnail')?.url}`}
+                src={carRental.images.find(img => img.type === 'thumbnail')?.url ? `/storage/${carRental.images.find(img => img.type === 'thumbnail').url}` : 'https://via.placeholder.com/1280x720'}
                 alt={carRental.car_model}
                 className="w-full h-auto object-cover rounded-lg aspect-video"
               />
@@ -265,8 +314,10 @@ export default function Show({ auth, carRental }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Recent Bookings</CardTitle>
+                  <CardDescription>All bookings associated with this car rental.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {/* TODO: Add booking data when available */}
                   <p className="text-muted-foreground">No recent bookings to display.</p>
                 </CardContent>
               </Card>
@@ -277,6 +328,7 @@ export default function Show({ auth, carRental }) {
                 <Card>
                   <CardHeader>
                     <CardTitle>Edit Details</CardTitle>
+                    <CardDescription>Update the car's information. Click save when you're done.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <EditCarForm carRental={carRental} />
@@ -285,6 +337,7 @@ export default function Show({ auth, carRental }) {
                 <Card>
                   <CardHeader>
                     <CardTitle>Manage Gallery</CardTitle>
+                    <CardDescription>Upload or delete gallery images for this car.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <GalleryManager carRental={carRental} />

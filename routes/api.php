@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\Client\LoginController;
 use App\Http\Controllers\Api\Public\HolidayPackageController as PublicHolidayPackageController;
 use App\Http\Controllers\Api\Public\CarRentalController as PublicCarRentalController;
 use App\Http\Controllers\Api\Public\ActivityController as PublicActivityController;
+
+
 use App\Http\Controllers\Api\TripPlannerController;
 
 // Authenticated Client Controllers
@@ -46,8 +48,6 @@ Route::get('/activities', [PublicActivityController::class, 'index']);
 Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 
 // Trip Planner Submission
-Route::post('/trip-planners', [TripPlannerController::class, 'store']);
-
 
 /*
 |--------------------------------------------------------------------------
@@ -60,6 +60,9 @@ Route::post('/trip-planners', [TripPlannerController::class, 'store']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
+    // ✅ Add these routes for the Trip Planner
+    Route::get('/trip-planner', [TripPlannerController::class, 'show']);
+    Route::post('/trip-planner', [TripPlannerController::class, 'store']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

@@ -55,4 +55,12 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    /**
+     * Get the trip planner associated with the user.
+     */
+    public function tripPlanner()
+    {
+        return $this->hasOne(TripPlanner::class);
+    }
 }
