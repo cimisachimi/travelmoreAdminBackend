@@ -15,9 +15,9 @@ class Order extends Model
         'status',
     ];
 
-    public function transaction()
+    public function user()
     {
-        return $this->hasOne(Transaction::class);
+        return $this->belongsTo(User::class);
     }
 
     public function orderItems()
@@ -25,8 +25,19 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
-    public function user()
+    public function transaction()
     {
-        return $this->belongsTo(User::class);
+        return $this->hasOne(Transaction::class);
     }
+    protected static function boot()
+{
+    parent::boot();
+
+    static::creating(function ($order) {
+        if (empty($order->order_number)) {
+            $order->order_number = 'ORD-' . strtoupper(uniqid());
+        }
+    });
+}
+
 }

@@ -10,17 +10,27 @@ class Transaction extends Model
     use HasFactory;
 
     protected $fillable = [
+        'order_id',
         'user_id',
-        'order_id', // ✅ Correct foreign key
-        'snap_token',
-        'status',
         'gross_amount',
-        'payment_type',
-        'payment_payloads',
+        'status',
+        'snap_token',
     ];
 
     public function order()
     {
         return $this->belongsTo(Order::class);
+    }
+
+    // ✅ ADD THIS
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    // ✅ If you are referencing booking.holidayPackage, add this too:
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class);
     }
 }

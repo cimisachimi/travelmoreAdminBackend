@@ -65,4 +65,8 @@ class CarRentalController extends Controller
 
         return response()->json($carRental);
     }
+    public function orders()
+    {
+        return $this->morphMany(Order::class, 'orderable');
+    }
 }

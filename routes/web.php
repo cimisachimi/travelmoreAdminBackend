@@ -29,10 +29,11 @@ Route::get('/dashboard', function () {
             'bookings' => Booking::count(),
             'planners' => TripPlanner::count(),
         ],
-        'recentBookings' => Booking::with(['user', 'holidayPackage'])
-                                    ->latest()
-                                    ->take(5)
-                                    ->get(),
+        'recentBookings' => Booking::with(['user', 'bookable'])
+        ->latest()
+        ->take(5)
+        ->get(),
+
         'newUsers' => User::latest()->take(5)->get(),
         'recentPlanners' => TripPlanner::latest()->take(5)->get(),
     ]);
