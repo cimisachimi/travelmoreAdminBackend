@@ -41,18 +41,26 @@ Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 | Authenticated Client API Routes
 |--------------------------------------------------------------------------
 */
+// ... inside the Route::middleware('auth:sanctum')->group(...)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
     Route::get('/trip-planner', [TripPlannerController::class, 'show']);
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
     Route::get('/user', fn (Request $request) => $request->user());
     Route::get('/my-orders', [OrderController::class, 'index']);
+
+    // ✅ ADD THIS LINE TO FETCH THE USER'S BOOKINGS
+    Route::get('/bookings', [BookingController::class, 'index']);
+
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
-    Route::post('/bookings', [BookingController::class, 'store']); 
+
+    Route::get('/{booking}', [BookingController::class, 'show']);
+    Route::put('/{booking}', [BookingController::class, 'update']);
+    Route::delete('/{booking}', [BookingController::class, 'destroy']);
+
     Route::post('/orders/{order}/pay', [PaymentController::class, 'createOrderTransaction']);
     Route::post('/payment/token', [PaymentController::class, 'createTransaction']);
 });
-
 /*
 |--------------------------------------------------------------------------
 | Admin API Routes

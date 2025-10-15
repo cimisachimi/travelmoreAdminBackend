@@ -4,28 +4,29 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
     use HasFactory;
 
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'user_id',
+        'total_amount',
+        'status',
+    ];
 
-    public function user(): BelongsTo
+    public function transaction()
     {
-        return $this->belongsTo(User::class);
+        return $this->hasOne(Transaction::class);
     }
 
-    public function items(): HasMany
+    public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
     }
 
-    public function transaction(): HasOne
+    public function user()
     {
-        return $this->hasOne(Transaction::class);
+        return $this->belongsTo(User::class);
     }
 }
