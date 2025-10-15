@@ -12,11 +12,26 @@ class CarRental extends Model
     protected $fillable = [
         'car_model',
         'brand',
+        'car_type',
+        'transmission',
+        'fuel_type',
+        'capacity',
+        'trunk_size',
         'description',
+        'features',
         'price_per_day',
         'availability',
         'status',
     ];
+
+    protected $casts = [
+        'features' => 'array',
+    ];
+
+    public function translations()
+    {
+        return $this->hasMany(CarRentalTranslation::class);
+    }
 
     public function images()
     {

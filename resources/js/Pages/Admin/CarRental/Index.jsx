@@ -13,10 +13,13 @@ import {
 } from "@/Components/ui/dialog";
 import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
+import { Textarea } from "@/Components/ui/textarea"; // Added for description
 import InputError from "@/Components/InputError";
 import AvailabilityCalendar from "@/Components/AvailabilityCalendar";
 import { PlusCircle, Edit, Trash2 } from "lucide-react";
 import DangerButton from "@/Components/DangerButton";
+import { Badge } from "@/Components/ui/badge";
+
 
 // Component for Pagination Links
 const Pagination = ({ links }) => (
@@ -48,10 +51,18 @@ export default function Index({ auth, carRentals, filters }) {
   const [selectedCar, setSelectedCar] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date(filters.year, filters.month - 1));
 
+  // Updated useForm hook with new fields
   const { data, setData, post, processing, errors, reset } = useForm({
     car_model: "",
     brand: "",
+    car_type: "",
+    transmission: "",
+    fuel_type: "",
+    capacity: "",
+    trunk_size: "",
     price_per_day: "",
+    description: "",
+    features: "", // Handled as a comma-separated string
     thumbnail: null,
     gallery: [],
   });
@@ -102,39 +113,78 @@ export default function Index({ auth, carRentals, filters }) {
         <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
           {/* --- Create Car Dialog --- */}
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            {/* *** THIS IS THE FIX *** */}
-            {/* The form content has been restored inside the DialogContent */}
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Add a New Car Rental</DialogTitle>
               </DialogHeader>
-              <form onSubmit={submitCreate} className="space-y-4">
-                <div>
-                  <Label htmlFor="car_model">Car Model</Label>
-                  <Input id="car_model" value={data.car_model} onChange={(e) => setData("car_model", e.target.value)} />
-                  <InputError message={errors.car_model} className="mt-2" />
+              <form onSubmit={submitCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                {/* Column 1 */}
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="brand">Brand</Label>
+                    <Input id="brand" value={data.brand} onChange={(e) => setData("brand", e.target.value)} />
+                    <InputError message={errors.brand} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="car_model">Car Model</Label>
+                    <Input id="car_model" value={data.car_model} onChange={(e) => setData("car_model", e.target.value)} />
+                    <InputError message={errors.car_model} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="car_type">Car Type (e.g., SUV, Sedan)</Label>
+                    <Input id="car_type" value={data.car_type} onChange={(e) => setData("car_type", e.target.value)} />
+                    <InputError message={errors.car_type} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="transmission">Transmission (e.g., Automatic)</Label>
+                    <Input id="transmission" value={data.transmission} onChange={(e) => setData("transmission", e.target.value)} />
+                    <InputError message={errors.transmission} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="fuel_type">Fuel Type (e.g., Gasoline)</Label>
+                    <Input id="fuel_type" value={data.fuel_type} onChange={(e) => setData("fuel_type", e.target.value)} />
+                    <InputError message={errors.fuel_type} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="price_per_day">Price Per Day (IDR)</Label>
+                    <Input id="price_per_day" type="number" value={data.price_per_day} onChange={(e) => setData("price_per_day", e.target.value)} />
+                    <InputError message={errors.price_per_day} className="mt-2" />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="brand">Brand</Label>
-                  <Input id="brand" value={data.brand} onChange={(e) => setData("brand", e.target.value)} />
-                  <InputError message={errors.brand} className="mt-2" />
+                {/* Column 2 */}
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="capacity">Capacity (People)</Label>
+                    <Input id="capacity" type="number" value={data.capacity} onChange={(e) => setData("capacity", e.target.value)} />
+                    <InputError message={errors.capacity} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="trunk_size">Trunk Size (Bags)</Label>
+                    <Input id="trunk_size" type="number" value={data.trunk_size} onChange={(e) => setData("trunk_size", e.target.value)} />
+                    <InputError message={errors.trunk_size} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea id="description" value={data.description} onChange={(e) => setData("description", e.target.value)} />
+                    <InputError message={errors.description} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="features">Features (comma-separated)</Label>
+                    <Input id="features" placeholder="e.g., Cruise Control, GPS, Bluetooth" value={data.features} onChange={(e) => setData("features", e.target.value)} />
+                    <InputError message={errors.features} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="thumbnail">Thumbnail</Label>
+                    <Input id="thumbnail" type="file" onChange={(e) => setData("thumbnail", e.target.files[0])} />
+                    <InputError message={errors.thumbnail} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="gallery">Gallery Images</Label>
+                    <Input id="gallery" type="file" multiple onChange={(e) => setData("gallery", e.target.files)} />
+                    <InputError message={errors.gallery} className="mt-2" />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="price_per_day">Price Per Day (IDR)</Label>
-                  <Input id="price_per_day" type="number" value={data.price_per_day} onChange={(e) => setData("price_per_day", e.target.value)} />
-                  <InputError message={errors.price_per_day} className="mt-2" />
-                </div>
-                <div>
-                  <Label htmlFor="thumbnail">Thumbnail</Label>
-                  <Input id="thumbnail" type="file" onChange={(e) => setData("thumbnail", e.target.files[0])} />
-                  <InputError message={errors.thumbnail} className="mt-2" />
-                </div>
-                <div>
-                  <Label htmlFor="gallery">Gallery Images</Label>
-                  <Input id="gallery" type="file" multiple onChange={(e) => setData("gallery", e.target.files)} />
-                  <InputError message={errors.gallery} className="mt-2" />
-                </div>
-                <DialogFooter>
+                <DialogFooter className="md:col-span-2">
                   <Button type="submit" disabled={processing}>Create Car</Button>
                 </DialogFooter>
               </form>
@@ -173,7 +223,6 @@ export default function Index({ auth, carRentals, filters }) {
             </DialogContent>
           </Dialog>
 
-
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -192,6 +241,9 @@ export default function Index({ auth, carRentals, filters }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Car</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Transmission</TableHead>
+                    <TableHead>Capacity</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -212,6 +264,11 @@ export default function Index({ auth, carRentals, filters }) {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <Badge variant="outline">{car.car_type}</Badge>
+                      </TableCell>
+                      <TableCell>{car.transmission}</TableCell>
+                      <TableCell>{car.capacity} People</TableCell>
+                      <TableCell>
                         {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(car.price_per_day)}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
@@ -222,13 +279,12 @@ export default function Index({ auth, carRentals, filters }) {
                         </Link>
                         <Button variant="outline" onClick={() => openEditor(car)}>
                           <Edit className="mr-2 h-4 w-4" />
-                          Edit Availability
+                          Availability
                         </Button>
                         <Button variant="destructive" size="icon" onClick={() => openDeleteDialog(car)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
-
                     </TableRow>
                   ))}
                 </TableBody>

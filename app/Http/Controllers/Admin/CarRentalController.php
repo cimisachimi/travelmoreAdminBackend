@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\CarRental;
+use App\Models\CarRentalTranslation;
 use App\Models\CarRentalAvailability;
 use Carbon\Carbon;
 
@@ -36,17 +37,20 @@ class CarRentalController extends Controller
             ]
         ]);
     }
-    public function show(Request $request, $id)
-{
-    $carRental = CarRental::with(['images', 'availabilities'])->findOrFail($id);
+        public function show($id)
+    {
+        // ✅ FIXED: Added 'translations' to the load() method.
+        // This is the key change to make sure your data is sent to the frontend.
+        $carRental = CarRental::with(['images', 'availabilities', 'translations'])->findOrFail($id);
 
-    // Add any other data you want to pass to the details page
-    // For example, you could fetch recent bookings for this car here.
-
-    return Inertia::render('Admin/CarRental/Show', [
-        'carRental' => $carRental,
-    ]);
-}
+        return Inertia::render('Admin/CarRental/Show', [
+            'carRental' => $carRental,
+            'filters' => [
+                'year' => date('Y'),
+                'month' => date('m'),
+            ],
+        ]);
+    }
 
     // ... all other methods (store, update_availability, destroy) remain unchanged ...
     
@@ -115,28 +119,66 @@ class CarRentalController extends Controller
         return redirect()->route('admin.rentals.index')->with('success', 'Car rental deleted successfully.');
     }
 
-    public function update(Request $request, $id)
+     public function update(Request $request, CarRental $carRental)
     {
-        $carRental = CarRental::findOrFail($id);
-
-        // ✅ Add validation for the new fields from your form
         $validatedData = $request->validate([
+            // Non-translatable fields
             'brand' => 'required|string|max:255',
             'car_model' => 'required|string|max:255',
+            'capacity' => 'nullable|integer|min:0',
+            'trunk_size' => 'nullable|integer|min:0',
             'price_per_day' => 'required|numeric|min:0',
-            'description' => 'nullable|string', // Validate the description
-            'availability' => 'required|integer|min:0',
-            'status' => 'required|in:available,unavailable,maintenance',
+            'status' => 'required|string|in:available,unavailable,maintenance',
+
+            // Translatable fields validation
+            'translations' => 'required|array',
+            'translations.en' => 'required|array', // Ensure English is present as a fallback
+            'translations.*.description' => 'nullable|string',
+            'translations.*.car_type' => 'nullable|string|max:255',
+            'translations.*.transmission' => 'nullable|string|max:255',
+            'translations.*.fuel_type' => 'nullable|string|max:255',
+            'translations.*.features' => 'nullable|string',
         ]);
 
-        // ✅ Update the model with the validated data
-        $carRental->update($validatedData);
+        // ✅ FIXED: Step 1 -> Update the main CarRental model with ONLY non-translatable data.
+        $carRental->update($request->only([
+            'brand',
+            'car_model',
+            'capacity',
+            'trunk_size',
+            'price_per_day',
+            'status',
+        ]));
+        
+        // ✅ FIXED: Step 2 -> Now, also update the main table's fallback fields using the English translation.
+        // This ensures you always have default data on the main car_rentals table.
+        $englishTranslation = $validatedData['translations']['en'];
+        $carRental->description = $englishTranslation['description'];
+        $carRental->car_type = $englishTranslation['car_type'];
+        $carRental->transmission = $englishTranslation['transmission'];
+        $carRental->fuel_type = $englishTranslation['fuel_type'];
+        $carRental->features = !empty($englishTranslation['features']) ? array_map('trim', explode(',', $englishTranslation['features'])) : [];
+        $carRental->save();
 
-        return back()->with('success', 'Car details updated successfully.');
+
+        // ✅ FIXED: Step 3 -> Loop through and save the detailed translations to the separate table.
+        // This part was correct before, but it's crucial that it runs after the main update.
+        foreach ($validatedData['translations'] as $locale => $data) {
+            $carRental->translations()->updateOrCreate(
+                ['locale' => $locale], // Match by locale
+                [
+                    'description' => $data['description'],
+                    'car_type' => $data['car_type'],
+                    'transmission' => $data['transmission'],
+                    'fuel_type' => $data['fuel_type'],
+                    'features' => !empty($data['features']) ? array_map('trim', explode(',', $data['features'])) : [],
+                ]
+            );
+        }
+
+        return redirect()->route('admin.rentals.show', $carRental->id)
+                         ->with('success', 'Car rental updated successfully.');
     }
-/**
- * Store a new gallery image for the specified car rental.
- */
 public function storeImage(Request $request, $id)
 {
     $request->validate([
@@ -171,5 +213,29 @@ public function destroyImage($carRentalId, $imageId)
     $image->delete();
 
     return back()->with('success', 'Image deleted successfully.');
+}
+
+public function updateThumbnail(Request $request, CarRental $carRental)
+{
+    $request->validate([
+        'thumbnail' => ['required', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
+    ]);
+
+    // Find and delete the old thumbnail from storage and database
+    if ($oldThumbnail = $carRental->images()->where('type', 'thumbnail')->first()) {
+        Storage::disk('public')->delete($oldThumbnail->url);
+        $oldThumbnail->delete();
+    }
+
+    // Store the new thumbnail file
+    $path = $request->file('thumbnail')->store('car_rentals/thumbnails', 'public');
+
+    // Create a new image record in the database
+    $carRental->images()->create([
+        'url' => $path,
+        'type' => 'thumbnail',
+    ]);
+
+    return back()->with('success', 'Thumbnail updated successfully.');
 }
 }

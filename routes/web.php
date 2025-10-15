@@ -17,8 +17,6 @@ use App\Models\HolidayPackage;
 use App\Models\Booking;
 use App\Models\TripPlanner;
 
-// ... (other routes like '/' and '/dashboard' stay the same) ...
-
 Route::get('/', function () {
     return redirect()->route('login');
 });
@@ -32,24 +30,20 @@ Route::get('/dashboard', function () {
             'planners' => TripPlanner::count(),
         ],
         'recentBookings' => Booking::with(['user', 'holidayPackage'])
-                                ->latest()
-                                ->take(5)
-                                ->get(),
+                                    ->latest()
+                                    ->take(5)
+                                    ->get(),
         'newUsers' => User::latest()->take(5)->get(),
         'recentPlanners' => TripPlanner::latest()->take(5)->get(),
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::middleware(['web', 'auth:sanctum'])->get('/user', function (Request $request) {
-    return $request->user();
-});
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // --- REVISED ADMIN ROUTES ---
-    // The name('admin.') automatically adds the 'admin.' prefix to every route inside this group.
+    // --- ADMIN ROUTES ---
     Route::prefix('admin')->middleware('admin')->name('admin.')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
         Route::get('/holiday-packages', [AdminHolidayPackageController::class, 'index'])->name('packages.index');
@@ -59,15 +53,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/activities', [AdminActivityController::class, 'index'])->name('activities.index');
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
 
-        Route::get('/car-rentals/{id}', [AdminCarRentalController::class, 'show'])->name('rentals.show');
-        Route::get('/car-rentals', [AdminCarRentalController::class, 'index'])->name('rentals.index');
-        Route::post('/car-rentals', [AdminCarRentalController::class, 'store'])->name('rentals.store');
-        Route::post('/car-rentals/{id}/availability', [AdminCarRentalController::class, 'update_availability'])->name('rentals.update_availability');
-        Route::delete('/car-rentals/{id}', [AdminCarRentalController::class, 'destroy'])->name('rentals.destroy');
+        // Car Rental Resource Routes
+        Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals');
+
+        // Custom Car Rental Routes
+        Route::post('/car-rentals/{carRental}/availability', [AdminCarRentalController::class, 'update_availability'])->name('rentals.update_availability');
+        Route::post('/car-rentals/{carRental}/images', [AdminCarRentalController::class, 'storeImage'])->name('rentals.images.store');
+        Route::delete('/car-rentals/{carRental}/images/{image}', [AdminCarRentalController::class, 'destroyImage'])->name('rentals.images.destroy');
         
-        Route::put('/car-rentals/{id}', [AdminCarRentalController::class, 'update'])->name('rentals.update');
-        Route::post('/car-rentals/{id}/images', [AdminCarRentalController::class, 'storeImage'])->name('rentals.images.store');
-        Route::delete('/car-rentals/{carRentalId}/images/{imageId}', [AdminCarRentalController::class, 'destroyImage'])->name('rentals.images.destroy');
+        // ✅ CORRECTED THUMBNAIL ROUTE
+    Route::post('/car-rentals/{carRental}/thumbnail', [AdminCarRentalController::class, 'updateThumbnail'])
+         ->name('rentals.thumbnail.update');
     });
 });
 
