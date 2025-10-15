@@ -3,64 +3,58 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Booking;
+use App\Models\CarRental;
+use App\Models\Order; // Import the Order model
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class BookingController extends Controller
 {
-    public function store(Request $request)
-    {
-        $validatedData = $request->validate([
-            'holiday_package_id' => 'required|exists:holiday_packages,id',
-            'booking_date' => 'required|date|after_or_equal:today',
-        ]);
+    // ... other methods
 
-        $booking = Booking::create([
-            'user_id' => auth()->id(),
-            'holiday_package_id' => $validatedData['holiday_package_id'],
-            'booking_date' => $validatedData['booking_date'],
-        ]);
-
-        return response()->json($booking, 201);
-    }
-       public function storeCarRentalBooking(Request $request, CarRental $carRental)
+    public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
         $validated = $request->validate([
             'booking_date' => 'required|date|after_or_equal:today',
             'pickup_location' => 'required|string|max:255',
         ]);
 
-        // Check if the car is already booked on that date
-        $isBooked = $carRental->availabilities()
+        $isUnavailable = $carRental->availabilities()
             ->where('date', $validated['booking_date'])
-            ->where('status', 'booked')
+            ->whereIn('status', ['booked', 'maintenance'])
             ->exists();
 
-        if ($isBooked) {
-            return response()->json(['message' => 'This car is already booked for the selected date.'], 409); // 409 Conflict
+        if ($isUnavailable) {
+            return response()->json(['message' => 'This car is unavailable for the selected date.'], 409);
         }
 
-        // Create the booking record
-        $booking = Booking::create([
+        // Create the Order
+        $order = Order::create([
             'user_id' => Auth::id(),
-            'bookable_id' => $carRental->id,
-            'bookable_type' => CarRental::class,
-            'booking_date' => $validated['booking_date'],
-            'status' => 'pending', // Or 'confirmed' depending on your workflow
+            'total_amount' => $carRental->price_per_day,
+            'status' => 'pending', // The order itself is pending until paid
+        ]);
+
+        // Attach the Car Rental as an OrderItem
+        $order->orderItems()->create([
+            'orderable_id' => $carRental->id,
+            'orderable_type' => CarRental::class,
+            'price' => $carRental->price_per_day,
             'details' => [
+                'booking_date' => $validated['booking_date'],
                 'pickup_location' => $validated['pickup_location'],
             ]
         ]);
 
-        // Update the car's availability for that date
+        // Mark the date as booked
         $carRental->availabilities()->updateOrCreate(
             ['date' => $validated['booking_date']],
             ['status' => 'booked']
         );
 
         return response()->json([
-            'message' => 'Booking successful!',
-            'booking' => $booking,
+            'message' => 'Order created successfully! Please proceed to payment.',
+            'order' => $order,
         ], 201);
     }
 }

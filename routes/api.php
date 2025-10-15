@@ -49,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-orders', [OrderController::class, 'index']);
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
     Route::post('/bookings', [BookingController::class, 'store']); 
+    Route::post('/orders/{order}/pay', [PaymentController::class, 'createOrderTransaction']);
     Route::post('/payment/token', [PaymentController::class, 'createTransaction']);
 });
 

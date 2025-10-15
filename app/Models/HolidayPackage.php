@@ -24,6 +24,7 @@ class HolidayPackage extends Model
         'min_age',
         'max_age',
     ];
+    
 
     /**
      * The attributes that should be cast.
@@ -33,4 +34,8 @@ class HolidayPackage extends Model
     protected $casts = [
         'itinerary' => 'array', // Automatically convert the JSON to an array
     ];
+    public function bookings()
+{
+    return $this->morphMany(Booking::class, 'bookable');
+}
 }

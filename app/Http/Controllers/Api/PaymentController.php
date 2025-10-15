@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Booking;
-use App\Models\Transaction;
+use App\Models\Order;
 use Illuminate\Http\Request;
 use Midtrans\Config;
 use Midtrans\Snap;
@@ -13,15 +12,13 @@ class PaymentController extends Controller
 {
     public function __construct()
     {
-        // Set your Merchant Server Key
+        // Set Midtrans configuration from your .env file
         Config::$serverKey = config('midtrans.server_key');
-        // Set to Development/Sandbox Environment (default). Set to true for Production Environment.
         Config::$isProduction = config('midtrans.is_production');
-        // Set sanitization on (default)
         Config::$isSanitized = true;
-        // Set 3DS transaction for credit card to true
         Config::$is3ds = true;
     }
+
 
     public function createTransaction(Request $request)
     {
@@ -59,6 +56,33 @@ class PaymentController extends Controller
 
         // Update transaction with the Snap Token
         $transaction->update(['snap_token' => $snapToken]);
+
+        return response()->json(['snap_token' => $snapToken]);
+    }
+    public function createOrderTransaction(Request $request, Order $order)
+    {
+        // Ensure the authenticated user owns this order
+        if ($request->user()->id !== $order->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Prevent re-paying for an already paid order
+        if ($order->transaction && $order->transaction->status === 'paid') {
+            return response()->json(['message' => 'This order has already been paid.'], 409);
+        }
+
+        $params = [
+            'transaction_details' => [
+                'order_id' => 'ORDER-' . $order->id . '-' . time(),
+                'gross_amount' => $order->total_amount,
+            ],
+            'customer_details' => [
+                'first_name' => $order->user->name,
+                'email' => $order->user->email,
+            ],
+        ];
+
+        $snapToken = Snap::getSnapToken($params);
 
         return response()->json(['snap_token' => $snapToken]);
     }

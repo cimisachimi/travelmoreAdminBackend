@@ -42,4 +42,8 @@ class CarRental extends Model
     {
         return $this->hasMany(CarRentalAvailability::class);
     }
+    public function bookings()
+    {
+        return $this->morphMany(Booking::class, 'bookable');
+    }
 }
