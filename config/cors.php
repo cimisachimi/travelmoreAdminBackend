@@ -22,6 +22,7 @@ return [
     'allowed_origins' => [
         'http://localhost:3000', // Add your Next.js/client app's local URL here
         'http://localhost:8000',
+        'https://travelmore-topaz.vercel.app'
     ],
 
     'allowed_origins_patterns' => [],

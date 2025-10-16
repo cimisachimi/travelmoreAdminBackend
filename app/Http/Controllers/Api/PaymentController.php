@@ -32,38 +32,30 @@ class PaymentController extends Controller
 
         $booking = Booking::with('user', 'bookable')->findOrFail($request->booking_id);
 
-        // Authorize the user
         if ($request->user()->id !== $booking->user_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Prevent re-paying for an already confirmed booking
         if ($booking->status === 'confirmed') {
             return response()->json(['message' => 'This booking has already been paid and confirmed.'], 409);
         }
 
         try {
-            // We always create a new order and transaction for each payment attempt.
-            // This is the simplest and most robust approach, preventing token reuse.
             return DB::transaction(function () use ($booking) {
-
-                // Step 1️⃣ — Create a new Order for this specific booking
                 $order = Order::create([
                     'user_id' => $booking->user_id,
-                    'booking_id' => $booking->id, // Link the order to the booking
+                    'booking_id' => $booking->id,
                     'order_number' => 'ORD-' . strtoupper(uniqid()),
                     'status' => 'pending',
                     'total_amount' => $booking->total_price,
                 ]);
 
-                // Step 2️⃣ — Create the Order Item
                 $order->orderItems()->create([
                     'orderable_id' => $booking->bookable_id,
                     'orderable_type' => $booking->bookable_type,
                     'price' => $booking->total_price,
                 ]);
 
-                // Step 3️⃣ — Create a new Transaction for this Order
                 $transaction = Transaction::create([
                     'order_id' => $order->id,
                     'user_id' => $booking->user_id,
@@ -71,11 +63,9 @@ class PaymentController extends Controller
                     'gross_amount' => $order->total_amount,
                 ]);
 
-                // Step 4️⃣ — Create Midtrans payment request
                 $itemName = $booking->bookable->name ?? ($booking->bookable->brand . ' ' . $booking->bookable->car_model);
                 $params = [
                     'transaction_details' => [
-                        // Ensure the order_id is unique for every API call to Midtrans
                         'order_id' => 'TRX-' . $transaction->id . '-' . time(),
                         'gross_amount' => $transaction->gross_amount,
                     ],
@@ -96,21 +86,23 @@ class PaymentController extends Controller
 
                 return response()->json(['snap_token' => $snapToken]);
             });
-
         } catch (\Exception $e) {
             Log::error('Payment creation failed: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to create payment transaction.'], 500);
         }
     }
 
-
     /**
      * Handles incoming webhook notifications from Midtrans.
      */
     public function notificationHandler(Request $request)
     {
+        // Log the raw incoming request for debugging
+        Log::info('Midtrans notification received:', $request->all());
+
         try {
-            $notification = new Notification();
+            // ✅ FIX: Pass the request payload to the Notification constructor
+            $notification = new Notification($request->all());
 
             $transactionStatus = $notification->transaction_status;
             $fraudStatus = $notification->fraud_status;
@@ -123,7 +115,6 @@ class PaymentController extends Controller
             }
             $transactionId = $orderIdParts[1];
 
-            // Eager load the order and the booking for efficient updates
             $transaction = Transaction::with('order.booking')->find($transactionId);
 
             if (!$transaction || !$transaction->order) {
@@ -132,6 +123,7 @@ class PaymentController extends Controller
             }
 
             if ($transaction->status !== 'pending') {
+                Log::info('Midtrans webhook: Transaction already processed.', ['transaction_id' => $transactionId]);
                 return response()->json(['message' => 'Transaction already processed.']);
             }
 
@@ -141,11 +133,9 @@ class PaymentController extends Controller
 
                 if ($transactionStatus == 'capture' || $transactionStatus == 'settlement') {
                     if ($fraudStatus == 'accept') {
-                        // Payment is successful and secure
                         $transaction->status = 'settlement';
                         $transaction->order->status = 'paid';
 
-                        // Reliably update the original booking
                         if ($transaction->order->booking) {
                             $booking = $transaction->order->booking;
                             $booking->payment_status = 'paid';
@@ -164,13 +154,15 @@ class PaymentController extends Controller
                 Log::info('Midtrans webhook: Processed successfully.', ['transaction_id' => $transaction->id]);
             });
 
-            return response()->json(['message' => 'Notification handled successfully.']);
+            // Return a 200 OK response to Midtrans
+            return response()->json(['message' => 'Notification handled successfully.'], 200);
 
         } catch (\Exception $e) {
             Log::error('Midtrans notification handler failed.', [
                 'error_message' => $e->getMessage(),
                 'request_content' => $request->all()
             ]);
+            // Return a server error response
             return response()->json(['message' => 'An error occurred.'], 500);
         }
     }
