@@ -29,15 +29,23 @@ class Order extends Model
     {
         return $this->hasOne(Transaction::class);
     }
+
+
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
     protected static function boot()
-{
-    parent::boot();
+    {
+        parent::boot();
 
-    static::creating(function ($order) {
-        if (empty($order->order_number)) {
-            $order->order_number = 'ORD-' . strtoupper(uniqid());
-        }
-    });
+        static::creating(function ($order) {
+            if (empty($order->order_number)) {
+                $order->order_number = 'ORD-' . strtoupper(uniqid());
+            }
+        });
+    }
 }
 
-}
+

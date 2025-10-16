@@ -9,14 +9,20 @@ import { Button } from '@/Components/ui/button';
 
 export default function OrderIndex({ auth, orders }) {
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const formatCurrency = (amount) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
-      case 'paid': return 'default';
-      case 'pending': return 'secondary';
-      case 'cancelled': return 'destructive';
-      default: return 'outline';
+      case 'paid':
+      case 'settlement':
+        return 'default';
+      case 'pending':
+        return 'secondary';
+      case 'failed':
+      case 'cancelled':
+        return 'destructive';
+      default:
+        return 'outline';
     }
   };
 
@@ -60,9 +66,11 @@ export default function OrderIndex({ auth, orders }) {
                   </TableCell>
                   <TableCell>
                     <ul className="list-disc list-inside">
-                      {order.items.map(item => (
+                      {/* Corrected: Use order.order_items instead of order.items */}
+                      {order.order_items.map(item => (
                         <li key={item.id} className="text-sm">
-                          {item.orderable.name}
+                          {/* Ensure orderable exists before trying to access its name */}
+                          {item.orderable ? item.orderable.name : 'Item not found'}
                         </li>
                       ))}
                     </ul>
@@ -72,6 +80,7 @@ export default function OrderIndex({ auth, orders }) {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>

@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
             $table->morphs('orderable'); // This creates orderable_id and orderable_type columns
             $table->unsignedInteger('quantity')->default(1);
-            $table->decimal('price', 8, 2);
+            $table->decimal('price', 10, 2);
             $table->timestamps();
         });
     }
