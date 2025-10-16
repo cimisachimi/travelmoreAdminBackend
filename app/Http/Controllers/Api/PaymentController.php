@@ -23,9 +23,6 @@ class PaymentController extends Controller
         Config::$is3ds = true;
     }
 
-    /**
-     * Creates a new Order and Transaction for a specific Booking to generate a Midtrans Snap Token.
-     */
     public function createTransaction(Request $request)
     {
         $request->validate(['booking_id' => 'required|exists:bookings,id']);
@@ -92,16 +89,11 @@ class PaymentController extends Controller
         }
     }
 
-    /**
-     * Handles incoming webhook notifications from Midtrans.
-     */
     public function notificationHandler(Request $request)
     {
-        // Log the raw incoming request for debugging
         Log::info('Midtrans notification received:', $request->all());
 
         try {
-            // ✅ FIX: Pass the request payload to the Notification constructor
             $notification = new Notification($request->all());
 
             $transactionStatus = $notification->transaction_status;
@@ -115,12 +107,21 @@ class PaymentController extends Controller
             }
             $transactionId = $orderIdParts[1];
 
-            $transaction = Transaction::with('order.booking')->find($transactionId);
+            $transaction = Transaction::find($transactionId);
 
-            if (!$transaction || !$transaction->order) {
-                Log::error('Midtrans webhook: Transaction or Order not found.', ['transaction_id' => $transactionId]);
+            if (!$transaction) {
+                Log::error('Midtrans webhook: Transaction not found.', ['transaction_id' => $transactionId]);
                 return response()->json(['message' => 'Transaction not found'], 404);
             }
+
+            // Eager load the order and booking to ensure we have the data
+            $transaction->load('order.booking');
+
+            if (!$transaction->order) {
+                Log::error('Midtrans webhook: Order not found for transaction.', ['transaction_id' => $transactionId]);
+                return response()->json(['message' => 'Order not found'], 404);
+            }
+
 
             if ($transaction->status !== 'pending') {
                 Log::info('Midtrans webhook: Transaction already processed.', ['transaction_id' => $transactionId]);
@@ -131,30 +132,16 @@ class PaymentController extends Controller
                 $transaction->payment_type = $notification->payment_type;
                 $transaction->payment_payloads = json_encode($notification->getResponse());
 
-                if ($transactionStatus == 'capture' || $transactionStatus == 'settlement') {
-                    if ($fraudStatus == 'accept') {
-                        $transaction->status = 'settlement';
-                        $transaction->order->status = 'paid';
-
-                        if ($transaction->order->booking) {
-                            $booking = $transaction->order->booking;
-                            $booking->payment_status = 'paid';
-                            $booking->status = 'confirmed';
-                            $booking->save();
-                        }
-                    }
+                if (($transactionStatus == 'capture' || $transactionStatus == 'settlement') && $fraudStatus == 'accept') {
+                    $this->updateStatuses($transaction, 'settlement', 'paid', 'confirmed', 'paid');
                 } else if (in_array($transactionStatus, ['cancel', 'deny', 'expire'])) {
-                    $transaction->status = 'failed';
-                    $transaction->order->status = 'failed';
+                    $this->updateStatuses($transaction, 'failed', 'failed');
                 }
 
                 $transaction->save();
                 $transaction->order->save();
-
-                Log::info('Midtrans webhook: Processed successfully.', ['transaction_id' => $transaction->id]);
             });
 
-            // Return a 200 OK response to Midtrans
             return response()->json(['message' => 'Notification handled successfully.'], 200);
 
         } catch (\Exception $e) {
@@ -162,8 +149,26 @@ class PaymentController extends Controller
                 'error_message' => $e->getMessage(),
                 'request_content' => $request->all()
             ]);
-            // Return a server error response
             return response()->json(['message' => 'An error occurred.'], 500);
+        }
+    }
+
+    /**
+     * Helper function to update transaction, order, and booking statuses.
+     */
+    protected function updateStatuses($transaction, $transactionStatus, $orderStatus, $bookingStatus = null, $bookingPaymentStatus = null)
+    {
+        $transaction->status = $transactionStatus;
+        $transaction->order->status = $orderStatus;
+
+        if ($transaction->order->booking && $bookingStatus && $bookingPaymentStatus) {
+            $booking = $transaction->order->booking;
+            $booking->status = $bookingStatus;
+            $booking->payment_status = $bookingPaymentStatus;
+            $booking->save();
+            Log::info('Booking status updated successfully for booking ID: ' . $booking->id);
+        } else {
+             Log::warning('Booking not found for order ID: ' . $transaction->order->id . '. Could not update status.');
         }
     }
 }

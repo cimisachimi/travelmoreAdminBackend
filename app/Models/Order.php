@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,8 +10,11 @@ class Order extends Model
 
     protected $fillable = [
         'user_id',
+        'booking_id',
         'total_amount',
         'status',
+        'orderable_id',
+        'orderable_type',
     ];
 
     public function user()
@@ -30,10 +32,14 @@ class Order extends Model
         return $this->hasOne(Transaction::class);
     }
 
-
     public function booking()
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function orderable()
+    {
+        return $this->morphTo();
     }
 
     protected static function boot()
@@ -47,5 +53,3 @@ class Order extends Model
         });
     }
 }
-
-
