@@ -13,7 +13,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController;
-use App\Http\Controllers\Api\Admin\HolidayPackageController as AdminHolidayPackageController;
+use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageController;
 
 /*
 |--------------------------------------------------------------------------
