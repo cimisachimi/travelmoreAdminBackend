@@ -13,11 +13,14 @@ class OrderController extends Controller
      */
     public function index()
     {
-        // Eager load all related data for efficiency
-        $orders = Order::with(['user', 'orderItems.orderable'])->latest()->get();
+        // ✅ This ensures all data needed by the frontend is loaded efficiently.
+        $orders = Order::with([
+            'user',
+            'booking.bookable', // Gets the booking and the associated product (or the default).
+        ])->latest()->get();
 
         return Inertia::render('Admin/Order/Index', [
-            'orders' => $orders,
+            'orders' => $orders
         ]);
     }
 }

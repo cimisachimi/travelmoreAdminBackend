@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ServiceController as AdminServiceController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\CarRentalController as AdminCarRentalController;
 use App\Http\Controllers\Admin\ActivityController as AdminActivityController;
+use App\Http\Controllers\Admin\DashboardController;
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -53,7 +54,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index');
         Route::get('/activities', [AdminActivityController::class, 'index'])->name('activities.index');
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
-
+        Route::get('/dashboard', DashboardController::class)->name('admin.dashboard'); // Add this line
         // Car Rental Resource Routes
         Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals');
 
