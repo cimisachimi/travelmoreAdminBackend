@@ -36,6 +36,9 @@ Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class,
 Route::get('/activities', [PublicActivityController::class, 'index']);
 Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 
+
+Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated Client API Routes
