@@ -11,7 +11,6 @@ return new class extends Migration
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('booking_id')->constrained()->onDelete('cascade');
-            $table->string('midtrans_booking_id')->nullable(); // From Midtrans
             $table->string('snap_token')->nullable();
             $table->string('status')->default('pending'); // pending, success, failed
             $table->decimal('gross_amount', 10, 2);
