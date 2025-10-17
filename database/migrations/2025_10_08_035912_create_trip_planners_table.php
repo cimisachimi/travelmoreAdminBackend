@@ -6,55 +6,61 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::create('trip_planners', function (Blueprint $table) {
             $table->id();
-            
-            // Step 1 & 2: Contact Information
-            $table->string('type'); // personal or company
-            $table->string('trip_type'); // domestic or foreign
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+
+            // --- Basic Info ---
+            $table->string('type'); // This is required from step 1
+            $table->string('trip_type')->nullable(); // ✅ ADDED ->nullable()
+
+            // --- Contact Info ---
             $table->string('full_name')->nullable();
-            $table->string('email');
-            $table->string('phone');
+            $table->string('email')->nullable(); // ✅ ADDED ->nullable()
+            $table->string('phone')->nullable(); // ✅ ADDED ->nullable()
             $table->string('company_name')->nullable();
             $table->string('brand_name')->nullable();
-
-            // Step 4: Address Information
+            
+            // --- The rest of your columns are already nullable, which is perfect ---
             $table->string('province')->nullable();
             $table->string('city')->nullable();
             $table->text('address')->nullable();
             $table->string('postal_code')->nullable();
             $table->string('country')->nullable();
-
-            // Step 5 & 6: Trip Details
-            $table->unsignedInteger('pax_adults')->default(0);
-            $table->unsignedInteger('pax_teens')->default(0);
-            $table->unsignedInteger('pax_kids')->default(0);
-            $table->unsignedInteger('pax_seniors')->default(0);
+            $table->string('pax_adults')->nullable();
+            $table->string('pax_teens')->nullable();
+            $table->string('pax_kids')->nullable();
+            $table->string('pax_seniors')->nullable();
             $table->date('departure_date')->nullable();
             $table->string('duration')->nullable();
-            $table->string('travel_type');
-
-            // Step 7, 8, 9: Preferences (using JSON for multi-select fields)
-            $table->string('budget_pack');
+            $table->string('budget_pack')->nullable();
             $table->json('addons')->nullable();
             $table->json('budget_priorities')->nullable();
             $table->json('travel_style')->nullable();
+            $table->string('other_travel_style')->nullable();
             $table->json('travel_personality')->nullable();
+            $table->string('other_travel_personality')->nullable();
+            $table->string('activity_level')->nullable();
             $table->text('must_visit')->nullable();
-            $table->text('attraction_preference')->nullable();
+            $table->string('attraction_preference')->nullable();
             $table->json('food_preference')->nullable();
+            $table->string('other_food_preference')->nullable();
             $table->text('accommodation_preference')->nullable();
-
-            // Step 10: Final Details
-            $table->boolean('consent');
-            $table->string('is_frequent_traveler');
-
+            $table->boolean('consent')->default(false);
+            $table->string('is_frequent_traveler')->nullable();
+            $table->string('travel_type')->nullable();
             $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('trip_planners');

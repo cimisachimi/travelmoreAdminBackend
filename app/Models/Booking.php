@@ -21,6 +21,7 @@ class Booking extends Model
         'total_price',
         'payment_status',
         'details',
+        'booking_date', // ✅ ADD THIS LINE
     ];
 
     /**
@@ -45,5 +46,21 @@ class Booking extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+    // ✅ --- ADD THIS ENTIRE FUNCTION ---
+    /**
+     * Get the order associated with the booking.
+     */
+    public function order()
+    {
+        return $this->hasOne(Order::class);
+    }
+
+    /**
+     * Get the transaction for the booking.
+     */
+    public function transaction()
+    {
+        return $this->hasOne(Transaction::class);
     }
 }

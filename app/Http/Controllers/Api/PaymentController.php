@@ -23,71 +23,84 @@ class PaymentController extends Controller
         Config::$is3ds = true;
     }
 
-    public function createTransaction(Request $request)
-    {
-        $request->validate(['booking_id' => 'required|exists:bookings,id']);
+   // In app/Http/Controllers/Api/PaymentController.php
 
-        $booking = Booking::with('user', 'bookable')->findOrFail($request->booking_id);
+public function createTransaction(Request $request)
+{
+    $request->validate(['booking_id' => 'required|exists:bookings,id']);
 
-        if ($request->user()->id !== $booking->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+    $booking = Booking::with('user', 'bookable')->findOrFail($request->booking_id);
 
-        if ($booking->status === 'confirmed') {
-            return response()->json(['message' => 'This booking has already been paid and confirmed.'], 409);
-        }
-
-        try {
-            return DB::transaction(function () use ($booking) {
-                $order = Order::create([
-                    'user_id' => $booking->user_id,
-                    'booking_id' => $booking->id,
-                    'order_number' => 'ORD-' . strtoupper(uniqid()),
-                    'status' => 'pending',
-                    'total_amount' => $booking->total_price,
-                ]);
-
-                $order->orderItems()->create([
-                    'orderable_id' => $booking->bookable_id,
-                    'orderable_type' => $booking->bookable_type,
-                    'price' => $booking->total_price,
-                ]);
-
-                $transaction = Transaction::create([
-                    'order_id' => $order->id,
-                    'user_id' => $booking->user_id,
-                    'status' => 'pending',
-                    'gross_amount' => $order->total_amount,
-                ]);
-
-                $itemName = $booking->bookable->name ?? ($booking->bookable->brand . ' ' . $booking->bookable->car_model);
-                $params = [
-                    'transaction_details' => [
-                        'order_id' => 'TRX-' . $transaction->id . '-' . time(),
-                        'gross_amount' => $transaction->gross_amount,
-                    ],
-                    'item_details' => [[
-                        'id' => $booking->bookable->id,
-                        'price' => $booking->total_price,
-                        'quantity' => 1,
-                        'name' => $itemName,
-                    ]],
-                    'customer_details' => [
-                        'first_name' => $booking->user->name,
-                        'email' => $booking->user->email,
-                    ],
-                ];
-
-                $snapToken = Snap::getSnapToken($params);
-                $transaction->update(['snap_token' => $snapToken]);
-
-                return response()->json(['snap_token' => $snapToken]);
-            });
-        } catch (\Exception $e) {
-            Log::error('Payment creation failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to create payment transaction.'], 500);
-        }
+    if ($request->user()->id !== $booking->user_id) {
+        return response()->json(['message' => 'Unauthorized'], 403);
     }
+
+    if ($booking->status === 'confirmed') {
+        return response()->json(['message' => 'This booking has already been paid and confirmed.'], 409);
+    }
+
+    try {
+        return DB::transaction(function () use ($booking) {
+            $order = Order::create([
+                'user_id' => $booking->user_id,
+                'booking_id' => $booking->id,
+                'order_number' => 'ORD-' . strtoupper(uniqid()),
+                'status' => 'pending',
+                'total_amount' => $booking->total_price,
+            ]);
+
+            $order->orderItems()->create([
+                'orderable_id' => $booking->bookable_id,
+                'orderable_type' => $booking->bookable_type,
+                'price' => $booking->total_price,
+                'quantity' => 1,
+            ]);
+
+            $transaction = Transaction::create([
+                'order_id' => $order->id,
+                'user_id' => $booking->user_id,
+                'status' => 'pending',
+                'gross_amount' => $order->total_amount,
+            ]);
+
+            // ✅ --- THIS IS THE FIX ---
+            $itemName = 'Unknown Service'; // A safe default
+            if ($booking->bookable instanceof \App\Models\CarRental) {
+                $itemName = $booking->bookable->brand . ' ' . $booking->bookable->car_model;
+            } elseif ($booking->bookable instanceof \App\Models\TripPlanner) {
+                $itemName = 'Custom Trip Plan to ' . ($booking->bookable->city ?: 'your destination');
+            } elseif (isset($booking->bookable->name)) {
+                $itemName = $booking->bookable->name;
+            }
+            // --- END OF FIX ---
+
+            $params = [
+                'transaction_details' => [
+                    'order_id' => 'TRX-' . $transaction->id . '-' . time(),
+                    'gross_amount' => $transaction->gross_amount,
+                ],
+                'item_details' => [[
+                    'id' => $booking->bookable->id,
+                    'price' => $booking->total_price,
+                    'quantity' => 1,
+                    'name' => $itemName, // The name is now guaranteed to be correct
+                ]],
+                'customer_details' => [
+                    'first_name' => $booking->user->name,
+                    'email' => $booking->user->email,
+                ],
+            ];
+
+            $snapToken = Snap::getSnapToken($params);
+            $transaction->update(['snap_token' => $snapToken]);
+
+            return response()->json(['snap_token' => $snapToken]);
+        });
+    } catch (\Exception $e) {
+        Log::error('Payment creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        return response()->json(['message' => 'Failed to create payment transaction.'], 500);
+    }
+}
 
     public function notificationHandler(Request $request)
     {
@@ -113,15 +126,13 @@ class PaymentController extends Controller
                 Log::error('Midtrans webhook: Transaction not found.', ['transaction_id' => $transactionId]);
                 return response()->json(['message' => 'Transaction not found'], 404);
             }
-
-            // Eager load the order and booking to ensure we have the data
+            
             $transaction->load('order.booking');
 
             if (!$transaction->order) {
                 Log::error('Midtrans webhook: Order not found for transaction.', ['transaction_id' => $transactionId]);
                 return response()->json(['message' => 'Order not found'], 404);
             }
-
 
             if ($transaction->status !== 'pending') {
                 Log::info('Midtrans webhook: Transaction already processed.', ['transaction_id' => $transactionId]);
@@ -153,9 +164,6 @@ class PaymentController extends Controller
         }
     }
 
-    /**
-     * Helper function to update transaction, order, and booking statuses.
-     */
     protected function updateStatuses($transaction, $transactionStatus, $orderStatus, $bookingStatus = null, $bookingPaymentStatus = null)
     {
         $transaction->status = $transactionStatus;

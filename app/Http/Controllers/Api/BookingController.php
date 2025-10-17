@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\CarRental; // Make sure CarRental is imported
+
+// In app/Http/Controllers/Api/BookingController.php
+use App\Models\TripPlanner; // ✅ Add this import
+use Illuminate\Support\Str;   // ✅ Add this import
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -80,4 +85,27 @@ class BookingController extends Controller
         $booking->update($validated);
         return response()->json($booking);
     }
+
+    // In app/Http/Controllers/Api/BookingController.php
+
+public function storeTripPlannerBooking(Request $request)
+{
+    $user = $request->user();
+    $tripPlanner = $user->tripPlanner()->firstOrFail();
+
+    // This method's ONLY job is to create the booking record.
+    // It returns the new booking, which contains the ID needed for the next step.
+    $booking = $tripPlanner->bookings()->create([
+        'user_id' => $user->id,
+        'booking_date' => now(),
+        'start_date' => $tripPlanner->departure_date,
+        'end_date' => $tripPlanner->departure_date, // Can be adjusted later
+        'status' => 'pending',
+        'payment_status' => 'unpaid', // Matches your existing car rental logic
+        'total_price' => $tripPlanner->price,
+    ]);
+
+    // Return the new booking object to the frontend.
+    return response()->json($booking, 201);
+}
 }

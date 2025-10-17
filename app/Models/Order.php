@@ -15,6 +15,7 @@ class Order extends Model
         'order_number',
         'status',
         'total_amount',
+        'order_number', // ✅ ADD THIS LINE
     ];
 
     /**
@@ -47,5 +48,14 @@ class Order extends Model
     public function transaction()
     {
         return $this->hasOne(Transaction::class);
+    }
+
+    // ✅ --- ADD THIS ENTIRE FUNCTION ---
+    /**
+     * Get the items for the order.
+     */
+    public function items()
+    {
+        return $this->hasMany(OrderItem::class);
     }
 }
