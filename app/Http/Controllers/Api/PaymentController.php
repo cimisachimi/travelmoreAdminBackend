@@ -107,7 +107,7 @@ public function createTransaction(Request $request)
         Log::info('Midtrans notification received:', $request->all());
 
         try {
-            $notification = new Notification($request->all());
+            $notification = new Notification();
 
             $transactionStatus = $notification->transaction_status;
             $fraudStatus = $notification->fraud_status;

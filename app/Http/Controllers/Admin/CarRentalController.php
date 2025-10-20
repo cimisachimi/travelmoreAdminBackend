@@ -9,6 +9,7 @@ use App\Models\CarRental;
 use App\Models\CarRentalTranslation;
 use App\Models\CarRentalAvailability;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 class CarRentalController extends Controller
 {
@@ -216,26 +217,27 @@ public function destroyImage($carRentalId, $imageId)
 }
 
 public function updateThumbnail(Request $request, CarRental $carRental)
-{
-    $request->validate([
-        'thumbnail' => ['required', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
-    ]);
+    {
+        $request->validate([
+            'thumbnail' => ['required', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
+        ]);
 
-    // Find and delete the old thumbnail from storage and database
-    if ($oldThumbnail = $carRental->images()->where('type', 'thumbnail')->first()) {
-        Storage::disk('public')->delete($oldThumbnail->url);
-        $oldThumbnail->delete();
+        // Find and delete the old thumbnail from storage and database
+        if ($oldThumbnail = $carRental->images()->where('type', 'thumbnail')->first()) {
+            // Now this line will correctly use the Storage facade
+            Storage::disk('public')->delete($oldThumbnail->url); //
+            $oldThumbnail->delete();
+        }
+
+        // Store the new thumbnail file
+        $path = $request->file('thumbnail')->store('car_rentals/thumbnails', 'public'); //
+
+        // Create a new image record in the database
+        $carRental->images()->create([
+            'url' => $path,
+            'type' => 'thumbnail',
+        ]); //
+
+        return back()->with('success', 'Thumbnail updated successfully.');
     }
-
-    // Store the new thumbnail file
-    $path = $request->file('thumbnail')->store('car_rentals/thumbnails', 'public');
-
-    // Create a new image record in the database
-    $carRental->images()->create([
-        'url' => $path,
-        'type' => 'thumbnail',
-    ]);
-
-    return back()->with('success', 'Thumbnail updated successfully.');
-}
 }
