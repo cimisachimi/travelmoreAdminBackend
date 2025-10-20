@@ -15,17 +15,19 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             
-            // ✅ Defines 'bookable_id' (bigint) and 'bookable_type' (varchar)
             $table->morphs('bookable'); 
-
-            $table->date('booking_date');
-            $table->string('status')->default('pending'); // e.g., pending, confirmed, cancelled
-            $table->decimal('total_price', 15, 2);
-            $table->string('payment_status')->default('unpaid'); // e.g., unpaid, paid, partial
             
-            // ✅ For storing extra info like pickup location
-            $table->json('details')->nullable(); 
+            // ✅ KEEPING booking_date
+            $table->date('booking_date'); 
             
+            // ✅ ADDING new nullable columns for date ranges
+            $table->date('start_date')->nullable();
+            $table->date('end_date')->nullable();
+            
+            $table->string('status')->default('pending');
+            $table->decimal('total_price', 15, 2)->nullable();
+            $table->string('payment_status')->default('unpaid');
+            $table->json('details')->nullable();
             $table->timestamps();
         });
     }

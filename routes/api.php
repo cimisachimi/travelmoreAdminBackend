@@ -31,7 +31,7 @@ Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class,
 // ✅ FIXED: Use the correct aliased controller name
 Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
 Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
-
+Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
 // Activities
 Route::get('/activities', [PublicActivityController::class, 'index']);
 Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);

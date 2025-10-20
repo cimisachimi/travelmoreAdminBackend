@@ -10,55 +10,46 @@ class Booking extends Model
     use HasFactory;
 
     /**
-     * ✅ FIXED: Updated fillable fields for polymorphism.
+     * ✅ FIXED: All fields are now fillable
      */
     protected $fillable = [
         'user_id',
         'bookable_id',
         'bookable_type',
-        'booking_date',
+        'booking_date',  // ✅ KEPT THIS
         'status',
         'total_price',
         'payment_status',
         'details',
-        'booking_date', // ✅ ADD THIS LINE
+        'start_date',      // ✅ ADDED THIS
+        'end_date',        // ✅ ADDED THIS
     ];
 
     /**
-     * The attributes that should be cast.
+     * ✅ FIXED: All dates are cast
      */
     protected $casts = [
         'details' => 'array',
-        'booking_date' => 'date',
+        'booking_date' => 'date', // ✅ KEPT THIS
+        'start_date' => 'date',   // ✅ ADDED THIS
+        'end_date' => 'date',     // ✅ ADDED THIS
     ];
 
-    /**
-     * ✅ FIXED: Define the polymorphic relationship.
-     */
     public function bookable()
     {
         return $this->morphTo();
     }
 
-    /**
-     * Get the user that owns the booking.
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
-    // ✅ --- ADD THIS ENTIRE FUNCTION ---
-    /**
-     * Get the order associated with the booking.
-     */
+    
     public function order()
     {
         return $this->hasOne(Order::class);
     }
 
-    /**
-     * Get the transaction for the booking.
-     */
     public function transaction()
     {
         return $this->hasOne(Transaction::class);
