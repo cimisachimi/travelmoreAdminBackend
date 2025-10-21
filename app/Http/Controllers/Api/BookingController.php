@@ -1,4 +1,5 @@
 <?php
+// app/Http/Controllers/Api/BookingController.php
 
 namespace App\Http\Controllers\Api;
 
@@ -6,14 +7,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\CarRental;
 use App\Models\TripPlanner;
-use App\Models\Order; // ✅ ADD THIS
-use App\Models\CarRentalAvailability; // ✅ ADD THIS
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\CarRentalAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB; // ✅ ADD THIS
-use Illuminate\Support\Facades\Log; // ✅ ADD THIS
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Carbon\Carbon; // ✅ ADD THIS
+use Carbon\Carbon; // ✅ Make sure Carbon is imported
 
 class BookingController extends Controller
 {
@@ -22,7 +24,7 @@ class BookingController extends Controller
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
-        // ✅ FIXED VALIDATION
+        // Validation remains the same
         $validated = $request->validate([
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
@@ -33,7 +35,7 @@ class BookingController extends Controller
         $endDate = Carbon::parse($validated['end_date']);
         $user = Auth::user();
 
-        // --- START AVAILABILITY CHECK ---
+        // Availability check remains the same
         if ($carRental->status !== 'available') {
              return response()->json(['message' => 'This car is not available for booking.'], 422);
         }
@@ -51,59 +53,69 @@ class BookingController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Create the Booking
+            $totalPrice = $validated['total_price'];
+            $downPayment = $totalPrice * 0.5; // ✅ Calculate 50% DP
+            $paymentDeadline = Carbon::now()->addHours(2); // ✅ Set 2-hour deadline
+
+            // 1. Create the Order with DP and Deadline
+            $order = new Order([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-' . strtoupper(Str::random(10)),
+                'total_amount' => $totalPrice,
+                'status' => 'pending', // Initial status
+                'payment_deadline' => $paymentDeadline, // ✅ Store deadline
+                'down_payment_amount' => $downPayment, // ✅ Store 50% DP amount
+            ]);
+            $order->save();
+
+            // 2. Create the OrderItem (remains the same)
+            $orderItem = new OrderItem([
+                'order_id' => $order->id,
+                'orderable_id' => $carRental->id,
+                'orderable_type' => CarRental::class,
+                'quantity' => 1,
+                'price' => $totalPrice,
+            ]);
+            $orderItem->save();
+
+            // 3. Create the Booking (remains the same)
             $booking = new Booking([
                 'user_id' => $user->id,
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
-                'total_price' => $validated['total_price'],
-                
-                // ✅ Fills all date columns correctly
-                'booking_date' => $startDate, // For legacy/single-day use
-                'start_date' => $startDate,   // For multi-day car rentals
-                'end_date' => $endDate,     // For multi-day car rentals
-                
-                'details' => [
-                    'from_controller' => 'storeCarRentalBooking'
-                ],
+                'total_price' => $totalPrice,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'booking_date' => $startDate,
+                'details' => ['from_controller' => 'storeCarRentalBooking'],
             ]);
-
-            // Save booking linked to the car
             $carRental->bookings()->save($booking);
 
-            // 2. Create the Order
-            $order = new Order([
-                'user_id' => $user->id,
-                'booking_id' => $booking->id,
-                'orderable_id' => $carRental->id,
-                'orderable_type' => CarRental::class,
-                'total_amount' => $validated['total_price'],
-                'status' => 'pending',
-                'order_number' => 'ORD-' . Str::uuid(),
-            ]);
+            // 4. Link the Order to the Booking
+            $order->booking_id = $booking->id;
             $order->save();
 
-            // 3. UPDATE AVAILABILITY
+            // 5. UPDATE AVAILABILITY (remains the same)
+            // ✅ This is correct: mark as 'booked' immediately to reserve.
             CarRentalAvailability::where('car_rental_id', $carRental->id)
                 ->whereBetween('date', [$startDate, $endDate])
                 ->update(['status' => 'booked']);
-            
+
             DB::commit();
 
             return response()->json([
-                'message' => 'Booking created successfully. Please proceed to payment.',
-                'booking' => $booking->load('bookable'), // 'bookable' is correct
-                'order' => $order,
+                'message' => 'Booking created successfully. You have 2 hours to complete the payment.',
+                'payment_deadline' => $paymentDeadline->toIso8601String(), // Send deadline to frontend
+                'order' => $order->load('orderItems.orderable', 'booking.bookable'),
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Car rental booking failed: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred. Please try again.'], 500);
+            Log::error('Car rental booking failed: ' . $e->getMessage() . ' Trace: ' . $e->getTraceAsString());
+            return response()->json(['message' => 'An error occurred during booking. Please try again.'], 500);
         }
         // --- END DATABASE TRANSACTION ---
     }
-
     /**
      * Display a listing of the user's bookings.
      */
@@ -125,7 +137,7 @@ class BookingController extends Controller
         if ($booking->user_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        $booking->load('bookable');
+        $booking->load('bookable', 'order.transaction');
         return response()->json($booking);
     }
 
@@ -134,13 +146,14 @@ class BookingController extends Controller
      */
     public function update(Request $request, Booking $booking)
     {
-        if ($booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        // Add Admin authorization check here if needed
+        if ($booking->user_id !== Auth::id() /* && !Auth::user()->isAdmin() */) {
+             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $validated = $request->validate([
             'status' => 'sometimes|in:pending,confirmed,cancelled',
-            'payment_status' => 'sometimes|in:unpaid,paid,partial',
+            // 'payment_status' => 'sometimes|in:unpaid,paid,partial', // Usually handled by payment gateway
         ]);
 
         $booking->update($validated);
@@ -154,13 +167,13 @@ class BookingController extends Controller
     {
         $validated = $request->validate([
             'trip_planner_id' => 'required|exists:trip_planners,id',
-            // You can add date validation here if needed
+            // Maybe add date validation if Trip Planners have specific dates
         ]);
 
         $user = Auth::user();
         $tripPlanner = TripPlanner::findOrFail($validated['trip_planner_id']);
-        
-        $tripDate = $tripPlanner->departure_date ?? now(); // Get trip date or use today
+
+        $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
 
         // --- START DATABASE TRANSACTION ---
         try {
@@ -172,14 +185,11 @@ class BookingController extends Controller
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
                 'total_price' => $tripPlanner->price,
-                
-                // Set all dates to the single trip date
                 'booking_date' => $tripDate,
                 'start_date' => $tripDate,
                 'end_date' => $tripDate,
             ]);
-            
-            // Save booking linked to the trip planner
+
             $tripPlanner->bookings()->save($booking);
 
             // 2. Create the Order
@@ -205,7 +215,7 @@ class BookingController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Trip planner booking failed: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred. Please try again.'], 500);
+            return response()->json(['message' => 'An error occurred while creating the booking.'], 500);
         }
         // --- END DATABASE TRANSACTION ---
     }

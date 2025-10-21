@@ -12,65 +12,92 @@ use App\Http\Controllers\Api\TripPlannerController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\Admin\UserController;
+use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
 use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageController;
 
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
 |--------------------------------------------------------------------------
+|
+| Routes accessible without authentication.
+| All these routes are automatically prefixed with /api by Laravel.
+|
 */
 
+// --- Authentication ---
 Route::post('/register', [LoginController::class, 'register']);
 Route::post('/login', [LoginController::class, 'login']);
 
-// Holiday Packages
+// --- Public Listings ---
 Route::get('/packages', [PublicHolidayPackageController::class, 'index']);
 Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class, 'show']);
 
-// ✅ FIXED: Use the correct aliased controller name
 Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
 Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
 Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
-// Activities
+
 Route::get('/activities', [PublicActivityController::class, 'index']);
 Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 
-
+// --- Webhooks ---
+// ✅ FIXED: Added the implicit /api prefix to match Ngrok/CSRF setup
+// This route should NOT have auth middleware.
 Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
+
 
 /*
 |--------------------------------------------------------------------------
 | Authenticated Client API Routes
 |--------------------------------------------------------------------------
+|
+| Routes requiring user authentication (Sanctum).
+| All these routes are automatically prefixed with /api by Laravel.
+|
 */
-// ... inside the Route::middleware('auth:sanctum')->group(...)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
+    Route::get('/user', fn (Request $request) => $request->user());
+
+    // --- Trip Planner ---
     Route::get('/trip-planner', [TripPlannerController::class, 'show']);
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
-    Route::get('/user', fn (Request $request) => $request->user());
-    Route::get('/my-orders', [OrderController::class, 'index']);
+    Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']); // Keep specific booking route
 
-    // ✅ ADD THIS LINE TO FETCH THE USER'S BOOKINGS
-    Route::get('/bookings', [BookingController::class, 'index']);
-
+    // --- Car Rentals ---
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
-    Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']);
 
-    Route::get('/{booking}', [BookingController::class, 'show']);
-    Route::put('/{booking}', [BookingController::class, 'update']);
-    Route::delete('/{booking}', [BookingController::class, 'destroy']);
+    // --- Orders & History ---
+    Route::get('/my-orders', [OrderController::class, 'index']);
+    Route::get('/my-orders/{id}', [OrderController::class, 'show']); // Added show route
+    Route::get('/bookings', [BookingController::class, 'index']); // Get user's bookings (consider removing if orders are enough)
+    // Removed old booking show/update/delete, manage through orders
 
-    Route::post('/orders/{order}/pay', [PaymentController::class, 'createOrderTransaction']);
-    Route::post('/payment/token', [PaymentController::class, 'createTransaction']);
+    // --- Payment ---
+    Route::post('/payment/create-transaction', [PaymentController::class, 'createTransaction']);
+    // Removed /orders/{order}/pay and /payment/token as they are covered by create-transaction
+
 });
+
 /*
 |--------------------------------------------------------------------------
 | Admin API Routes
 |--------------------------------------------------------------------------
+|
+| Routes requiring admin authentication.
+| These routes are prefixed with /api/admin.
+|
 */
 Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
-    Route::apiResource('users', UserController::class);
+    // Using apiResource automatically creates standard CRUD routes
+    // (index, store, show, update, destroy)
+
+    Route::apiResource('users', ApiAdminUserController::class); // Use aliased controller
     Route::apiResource('holiday-packages', AdminHolidayPackageController::class);
+    // Add apiResources for other admin sections (CarRentals, Activities, Orders, etc.) here
+    // Example:
+    // Route::apiResource('car-rentals', \App\Http\Controllers\Admin\CarRentalController::class);
+    // Route::apiResource('activities', \App\Http\Controllers\Admin\ActivityController::class);
+    // Route::apiResource('orders', \App\Http\Controllers\Admin\OrderController::class);
+    // Route::apiResource('transactions', \App\Http\Controllers\Admin\TransactionController::class);
 });

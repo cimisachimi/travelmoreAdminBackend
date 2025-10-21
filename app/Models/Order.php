@@ -1,4 +1,5 @@
 <?php
+// app/Models/Order.php
 
 namespace App\Models;
 
@@ -13,11 +14,15 @@ class Order extends Model
         'user_id',
         'booking_id',
         'order_number',
-        'status',
         'total_amount',
-        'order_number', // ✅ ADD THIS LINE
+        'down_payment_amount', // ✅ ADD THIS
+        'status',
+        'payment_deadline', // ✅ ADD THIS
     ];
 
+    protected $casts = [
+        'payment_deadline' => 'datetime', // ✅ ADD THIS
+    ];
     /**
      * An Order belongs to a User.
      */
@@ -25,7 +30,10 @@ class Order extends Model
     {
         return $this->belongsTo(User::class);
     }
-
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
     /**
      * An Order has one associated Booking.
      */
