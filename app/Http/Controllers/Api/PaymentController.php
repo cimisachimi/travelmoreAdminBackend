@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http{
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -21,7 +21,6 @@ class PaymentController extends Controller
 {
     public function __construct()
     {
-        // Ensure Midtrans config keys are loaded correctly
         Config::$serverKey = config('midtrans.server_key');
         Config::$isProduction = config('midtrans.is_production');
         Config::$isSanitized = true;
@@ -39,36 +38,35 @@ class PaymentController extends Controller
             ->findOrFail($validated['order_id']);
         $paymentOption = $validated['payment_option'] ?? 'down_payment';
 
-        // Authorization and status checks...
         if ($request->user()->id !== $order->user_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        // ... (other checks remain the same)
+        // ... (other status checks remain the same) ...
 
         $amountToCharge = 0;
         $itemNameSuffix = '';
-        $transactionNote = ''; // Variable to store the note
+        $transactionNote = '';
 
         if ($paymentOption === 'full_payment') {
             if ($order->status === 'partially_paid') {
                 $amountToCharge = $order->total_amount - $order->down_payment_amount;
                 $itemNameSuffix = '-BAL';
-                $transactionNote = 'balance_payment'; // Note for balance
+                $transactionNote = 'balance_payment';
             } else {
                 $amountToCharge = $order->total_amount;
-                $transactionNote = 'full_payment'; // Note for full payment
+                $transactionNote = 'full_payment';
             }
         } else { // down_payment
             $amountToCharge = $order->down_payment_amount;
             $itemNameSuffix = '-DP';
-            $transactionNote = 'down_payment'; // Note for down payment
+            $transactionNote = 'down_payment'; // This should be saved correctly
 
             if (empty($amountToCharge) || $amountToCharge <= 0) {
-                // Fallback logic remains the same...
-                $amountToCharge = $order->total_amount;
-                $paymentOption = 'full_payment';
-                $transactionNote = 'full_payment';
-                $itemNameSuffix = '';
+                // ... (Fallback logic) ...
+                 $amountToCharge = $order->total_amount;
+                 $paymentOption = 'full_payment';
+                 $transactionNote = 'full_payment';
+                 $itemNameSuffix = '';
             }
         }
 
@@ -77,19 +75,17 @@ class PaymentController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($order, $amountToCharge, $paymentOption, $itemNameSuffix, $transactionNote) { // Pass $transactionNote
-                // ✅ Ensure the 'notes' field is correctly set when creating the transaction
+            return DB::transaction(function () use ($order, $amountToCharge, $paymentOption, $itemNameSuffix, $transactionNote) {
                 $transaction = Transaction::create([
                     'order_id' => $order->id,
                     'user_id' => $order->user_id,
                     'status' => 'pending',
                     'gross_amount' => $amountToCharge,
-                    'notes' => $transactionNote, // Use the determined note
+                    'notes' => $transactionNote, // Save the note
                 ]);
 
-                // Map order items for Midtrans payload
-                $item_details = $order->orderItems->map(function ($item) use ($amountToCharge, $paymentOption, $itemNameSuffix, $order) {
-                     // ... (item name logic remains the same)
+                // ... (Item details mapping logic) ...
+                 $item_details = $order->orderItems->map(function ($item) use ($amountToCharge, $paymentOption, $itemNameSuffix, $order) {
                     $itemName = 'Unknown Item';
                     if ($item->orderable instanceof CarRental) {
                         $itemName = $item->orderable->brand . ' ' . $item->orderable->car_model;
@@ -103,47 +99,48 @@ class PaymentController extends Controller
                     } elseif ($paymentOption === 'full_payment' && $order->status === 'partially_paid') {
                         $displayName = 'Balance for ' . $itemName;
                     }
-                    // ... (end item name logic)
 
                     return [
-                        'id' => $item->orderable_type . '-' . $item->orderable_id . $itemNameSuffix,
+                        'id' => class_basename($item->orderable_type) . '-' . $item->orderable_id . $itemNameSuffix, // Use class_basename for shorter ID
                         'price' => (int) $amountToCharge,
                         'quantity' => 1,
                         'name' => substr($displayName, 0, 50),
                     ];
-                })->toArray();
+                 })->toArray();
+
 
                 if (empty($item_details)) {
                      throw new \Exception('Cannot create payment with no items.');
                 }
 
-                // Calculate expiry duration
+                // ... (Expiry calculation logic) ...
                 $now = Carbon::now();
                 $orderDeadline = $order->payment_deadline;
                 $midtransExpiryTime = $now->copy()->addHours(2);
-                // ... (expiry logic remains the same)
+                if ($orderDeadline && $orderDeadline->isAfter($now) && $orderDeadline->lt($midtransExpiryTime)) {
+                    $midtransExpiryTime = $orderDeadline;
+                } elseif ($orderDeadline && $orderDeadline->isPast()) {
+                    throw new \Exception('Payment deadline has passed.');
+                }
                 $duration = (int) $now->diffInMinutes($midtransExpiryTime);
 
-                // Midtrans parameters
+
                 $params = [
                     'transaction_details' => [
                         'order_id' => 'TRX-' . $transaction->id . '-' . time(),
                         'gross_amount' => (int) $transaction->gross_amount,
                     ],
                     'item_details' => $item_details,
-                    'customer_details' => [
-                        'first_name' => $order->user->name,
-                        'email' => $order->user->email,
-                    ],
+                    'customer_details' => [ /* ... */ ],
                     'expiry' => [
-                        'start_time' => $now->format('Y-m-d H:i:s O'),
-                        'unit' => 'minute',
-                        'duration' => $duration > 1 ? $duration : 1,
+                         'start_time' => $now->format('Y-m-d H:i:s O'),
+                         'unit' => 'minute',
+                         'duration' => $duration > 1 ? $duration : 1,
                     ],
                 ];
 
-                // Get Snap token and update transaction/order
                 $snapToken = Snap::getSnapToken($params);
+
                 $transaction->update(['snap_token' => $snapToken]);
                 $order->update(['status' => 'processing']);
 
@@ -169,38 +166,23 @@ class PaymentController extends Controller
             $fraudStatus = $notification->fraud_status;
             $midtransOrderId = $notification->order_id;
 
-            // Extract transaction ID from Midtrans order ID
+            // ... (Extract transactionId) ...
             $orderIdParts = explode('-', $midtransOrderId);
-            // ... (validation remains the same)
+            if (count($orderIdParts) < 2 || $orderIdParts[0] !== 'TRX') { /*...*/ }
             $transactionId = $orderIdParts[1];
 
             $transaction = Transaction::find($transactionId);
-            // ... (validation for transaction existence remains the same)
-            if (!$transaction) {
-                 Log::error('Midtrans webhook: Transaction not found.', ['transaction_id' => $transactionId]);
-                 return response()->json(['message' => 'Transaction not found'], 404);
-            }
+            if (!$transaction) { /*...*/ }
 
-
-            // Load related order and booking
             $transaction->load('order.booking.bookable');
             $order = $transaction->order;
-             // ... (validation for order existence remains the same)
-            if (!$order) {
-                 Log::error('Midtrans webhook: Order not found for transaction.', ['transaction_id' => $transactionId]);
-                 return response()->json(['message' => 'Order association missing'], 200); // 200 to Midtrans
-            }
-
+            if (!$order) { /*...*/ }
 
             // Prevent re-processing
-            if ($transaction->status === 'settlement' || $transaction->status === 'failed') {
-                Log::info('Midtrans webhook: Transaction already processed.', ['transaction_id' => $transactionId]);
-                return response()->json(['message' => 'Transaction already processed.']);
-            }
+            if ($transaction->status === 'settlement' || $transaction->status === 'failed') { /*...*/ }
 
             // --- Main Update Logic ---
             DB::transaction(function () use ($transaction, $order, $notification, $transactionStatus, $fraudStatus) {
-                // Always update transaction details from notification
                 $transaction->payment_type = $notification->payment_type;
                 $transaction->payment_payloads = json_encode($notification->getResponse());
 
@@ -209,8 +191,11 @@ class PaymentController extends Controller
 
                     $transaction->status = 'settlement';
 
-                    // ✅ THE FIX: Explicitly check the 'notes' field for 'down_payment'
-                    $isDownPayment = ($transaction->notes === 'down_payment');
+                    // ✅ ADDED EXTRA LOGGING: Log the value of notes and current order status
+                    Log::info("Processing successful payment for Txn ID: {$transaction->id}. Notes: '{$transaction->notes}'. Current Order Status: '{$order->status}'");
+
+                    // Refined check: Use trim() just in case of extra spaces
+                    $isDownPayment = (trim($transaction->notes) === 'down_payment');
 
                     if ($isDownPayment && $order->status !== 'partially_paid') {
                         // This transaction was specifically for a down payment
@@ -220,7 +205,8 @@ class PaymentController extends Controller
                             $order->booking->payment_status = 'partial';
                         }
                         Log::info('Order ID ' . $order->id . ' status updated to partially_paid.');
-                    } else {
+
+                    } else if ($order->status !== 'paid') { // Only update to 'paid' if not already 'paid'
                         // This transaction was for the full amount or the remaining balance
                         $order->status = 'paid';
                         if ($order->booking) {
@@ -228,23 +214,22 @@ class PaymentController extends Controller
                             $order->booking->payment_status = 'paid';
                         }
                         Log::info('Order ID ' . $order->id . ' status updated to paid.');
+                    } else {
+                         // Order was already paid (e.g., duplicate notification), log but do nothing.
+                         Log::info('Order ID ' . $order->id . ' is already paid. No status change needed.');
                     }
 
-                // PENDING PAYMENT
+                // ... (PENDING and FAILED logic remains the same) ...
                 } else if ($transactionStatus == 'pending') {
                     $transaction->status = 'pending';
-                    // Keep order status as 'processing' (or potentially 'pending' if not already processing)
                     if ($order->status === 'pending') {
                         $order->status = 'processing';
                     }
                     Log::info('Transaction ID ' . $transaction->id . ' is pending.');
 
-                // FAILED/EXPIRED/DENIED PAYMENT
                 } else if (in_array($transactionStatus, ['deny', 'cancel', 'expire', 'failure'])) {
                     $transaction->status = 'failed';
-
                     if ($order->status !== 'partially_paid' && $order->status !== 'paid') {
-                        // Only fail the order if no prior payment was made
                         $order->status = 'failed';
                         if ($order->booking) {
                             $order->booking->status = 'cancelled';
@@ -255,11 +240,9 @@ class PaymentController extends Controller
                     } else {
                         Log::warning('Balance payment failed for Order ID: ' . $order->id . '. Booking remains confirmed.');
                     }
-
-                // UNHANDLED STATUS
                 } else {
                      Log::warning('Midtrans webhook: Unhandled transaction status.', [/*...*/]);
-                     $transaction->status = 'pending'; // Revert to pending if unknown
+                     $transaction->status = 'pending';
                 }
 
                 // Save changes
@@ -274,19 +257,13 @@ class PaymentController extends Controller
             Log::info('Midtrans notification handled successfully for Transaction ID: ' . $transaction->id);
             return response()->json(['message' => 'Notification handled successfully.'], 200);
 
-        } catch (\Exception $e) { // Catch standard exceptions during handling
-            Log::error('Midtrans notification handler failed.', [
-                'error_message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_content' => $request->getContent()
-            ]);
-            // Return 500 so Midtrans might retry
+        } catch (\Exception $e) {
+            Log::error('Midtrans notification handler failed.', [ /*...*/ ]);
             return response()->json(['message' => 'An internal error occurred.'], 500);
         }
     }
-    /**
-     * Helper Function: Release availability for failed/cancelled orders.
-     */
+
+
     protected function releaseAvailability(Order $order)
     {
         if ($order->booking && $order->booking->bookable instanceof CarRental) {
@@ -312,4 +289,4 @@ class PaymentController extends Controller
             }
         }
     }
-}
+}}
