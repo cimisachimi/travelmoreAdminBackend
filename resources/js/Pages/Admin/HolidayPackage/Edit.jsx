@@ -358,8 +358,46 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
 // ...
 // --- End of Repeater Components ---
 
-
-// --- [FIXED] Main Edit Form Component ---
+const safeParseJson = (jsonData, defaultValue) => {
+  // If it's already a valid object/array (and not null), return it
+  if (typeof jsonData === 'object' && jsonData !== null) {
+    // Specifically check for cost structure if defaultValue indicates it
+    if (Array.isArray(defaultValue) && Array.isArray(jsonData)) return jsonData;
+    if (!Array.isArray(defaultValue) && !Array.isArray(jsonData)) {
+      // Basic check for cost structure
+      if (jsonData.hasOwnProperty('included') && jsonData.hasOwnProperty('excluded')) return jsonData;
+      // If defaultValue is cost structure but jsonData isn't, return default
+      if (defaultValue.hasOwnProperty('included') && defaultValue.hasOwnProperty('excluded')) return defaultValue;
+      return jsonData; // Return other non-array objects
+    }
+    // Mismatch between array/object type, return default
+    return defaultValue;
+  }
+  // If it's not a string or an empty string, return default
+  if (typeof jsonData !== 'string' || !jsonData.trim()) {
+    return defaultValue;
+  }
+  // Try parsing the string
+  try {
+    const parsed = JSON.parse(jsonData);
+    // Ensure the parsed type matches the defaultValue type (array vs object)
+    if (Array.isArray(defaultValue) && Array.isArray(parsed)) return parsed;
+    if (!Array.isArray(defaultValue) && typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      // Basic check for cost structure if needed
+      if (defaultValue.hasOwnProperty('included') && defaultValue.hasOwnProperty('excluded')) {
+        return (parsed.hasOwnProperty('included') && parsed.hasOwnProperty('excluded')) ? parsed : defaultValue;
+      }
+      return parsed; // Return other parsed objects
+    }
+    // Parsed type mismatch, return default
+    return defaultValue;
+  } catch (e) {
+    console.error("Failed to parse JSON prop:", jsonData, e);
+    return defaultValue; // Return default on parsing error
+  }
+};
+// --- END OF MOVE ---
+// --- [UPDATED] Main Edit Form Component ---
 const EditPackageForm = ({ pkg }) => {
   // Helper to safely get translation data for initialization
   const getTranslationData = (locale, field) => pkg.translations?.[locale]?.[field] || '';
@@ -373,13 +411,13 @@ const EditPackageForm = ({ pkg }) => {
     rating: pkg.rating || '',
     map_url: pkg.map_url || '',
 
-    // Initialize JSON fields correctly
-    itinerary: Array.isArray(pkg.itinerary) ? pkg.itinerary : [],
-    cost: typeof pkg.cost === 'object' && pkg.cost !== null ? pkg.cost : { included: [], excluded: [] },
-    faqs: Array.isArray(pkg.faqs) ? pkg.faqs : [],
-    trip_info: Array.isArray(pkg.trip_info) ? pkg.trip_info : [],
+    // [FIXED] Initialize JSON fields robustly using safeParseJson
+    itinerary: safeParseJson(pkg.itinerary, []),
+    cost: safeParseJson(pkg.cost, { included: [], excluded: [] }),
+    faqs: safeParseJson(pkg.faqs, []),
+    trip_info: safeParseJson(pkg.trip_info, []),
 
-    // [FIX] Translatable fields, grouped by field name to match validator
+    // Translatable fields
     name: {
       en: getTranslationData('en', 'name'),
       id: getTranslationData('id', 'name')
@@ -397,8 +435,9 @@ const EditPackageForm = ({ pkg }) => {
       id: getTranslationData('id', 'category')
     },
 
-    _method: 'PUT' // Important for Laravel update route
+    _method: 'PUT'
   });
+  // --- [NEW] Helper function to safely parse JSON or return default ---
 
   // Reset form if the package data prop changes
   useEffect(() => {
@@ -411,13 +450,13 @@ const EditPackageForm = ({ pkg }) => {
       rating: pkg.rating || '',
       map_url: pkg.map_url || '',
 
-      // JSON fields
-      itinerary: Array.isArray(pkg.itinerary) ? pkg.itinerary : [],
-      cost: typeof pkg.cost === 'object' && pkg.cost !== null ? pkg.cost : { included: [], excluded: [] },
-      faqs: Array.isArray(pkg.faqs) ? pkg.faqs : [],
-      trip_info: Array.isArray(pkg.trip_info) ? pkg.trip_info : [],
+      // [FIXED] Reset JSON fields robustly using safeParseJson
+      itinerary: safeParseJson(pkg.itinerary, []),
+      cost: safeParseJson(pkg.cost, { included: [], excluded: [] }),
+      faqs: safeParseJson(pkg.faqs, []),
+      trip_info: safeParseJson(pkg.trip_info, []),
 
-      // [FIX] Translatable fields
+      // Translatable fields
       name: {
         en: getTranslationData('en', 'name'),
         id: getTranslationData('id', 'name')
@@ -437,7 +476,7 @@ const EditPackageForm = ({ pkg }) => {
 
       _method: 'PUT'
     });
-  }, [pkg, reset]); // Dependency array includes pkg and reset
+  }, [pkg, reset]);
 
 
   const submit = (e) => {
@@ -448,7 +487,7 @@ const EditPackageForm = ({ pkg }) => {
         toast.success('Package updated successfully!');
       },
       onError: (errs) => {
-        console.error("Update errors:", errs); // This is what you provided
+        console.error("Update errors:", errs);
         toast.error('Failed to update package. Please check errors.');
       }
     });
@@ -464,8 +503,8 @@ const EditPackageForm = ({ pkg }) => {
           <TabsTrigger value="structured">Structured Data</TabsTrigger>
         </TabsList>
 
+        {/* Core Details Tab (Unchanged) */}
         <TabsContent value="core">
-          {/* (This content is unchanged) */}
           <Card>
             <CardHeader>
               <CardTitle>Core Details (Non-Translatable)</CardTitle>
@@ -481,8 +520,8 @@ const EditPackageForm = ({ pkg }) => {
           </Card>
         </TabsContent>
 
+        {/* Translations Tab (Unchanged) */}
         <TabsContent value="translations">
-          {/* (This content is unchanged, but the component it calls is fixed) */}
           <Card>
             <CardHeader>
               <CardTitle>Translatable Content</CardTitle>
@@ -493,7 +532,6 @@ const EditPackageForm = ({ pkg }) => {
                   <TabsTrigger value="en_trans">English</TabsTrigger>
                   <TabsTrigger value="id_trans">Indonesian</TabsTrigger>
                 </TabsList>
-                {/* Pass data, setData, errors correctly. TranslationFields will now work. */}
                 <TabsContent value="en_trans" className="mt-4">
                   <TranslationFields locale="en" data={data} setData={setData} errors={errors} />
                 </TabsContent>
@@ -505,8 +543,8 @@ const EditPackageForm = ({ pkg }) => {
           </Card>
         </TabsContent>
 
+        {/* Structured Data Tab (Repeaters - Unchanged) */}
         <TabsContent value="structured">
-          {/* (This content is unchanged) */}
           <div className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Itinerary</CardTitle></CardHeader>
@@ -534,7 +572,6 @@ const EditPackageForm = ({ pkg }) => {
     </form>
   );
 };
-
 
 // Component for Managing Images (Gallery)
 // (This component is unchanged from the previous answer)
