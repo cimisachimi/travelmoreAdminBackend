@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\HolidayPackage;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 class HolidayPackageSeeder extends Seeder
@@ -13,72 +13,85 @@ class HolidayPackageSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('holiday_packages')->insert([
+         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+         HolidayPackage::truncate();
+         DB::table('holiday_package_translations')->truncate();
+         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+        $packagesData = [
             [
-                'name' => 'Bali Tropical Paradise',
-                'description' => 'Experience the stunning beaches and vibrant culture of Bali.',
-                'number_of_days' => 7,
-                'price' => 1200.00,
-                'accommodation_details' => '4-star resort with ocean views, daily breakfast included.',
-                'itinerary' => json_encode([
-                    ['day' => 1, 'activity' => 'Arrival in Denpasar, transfer to resort.'],
-                    ['day' => 2, 'activity' => 'Surfing lessons at Kuta Beach.'],
-                    ['day' => 3, 'activity' => 'Ubud Monkey Forest and rice terraces tour.'],
-                ]),
-                'min_age' => 18,
-                'max_age' => 65,
-                'created_at' => now(),
-                'updated_at' => now(),
+                // Data utama (non-terjemahan)
+                'main' => [
+                    'duration' => 5,
+                    'price_regular' => 5000000,
+                    'price_exclusive' => 4500000,
+                    'price_child' => 2250000,
+                    'rating' => 4.8,
+                    'map_url' => 'https://maps.google.com/maps?q=bali', // Gunakan URL valid
+                    // Berikan array PHP biasa, biarkan $casts di model bekerja
+                    'itinerary' => [['day'=>1, 'title'=>'Arrival in Bali', 'description'=>'Meet and greet...']],
+                    'cost' => ['included'=>['Accommodation', 'Transport'], 'excluded'=>['Flights', 'Personal Expenses']],
+                    'faqs' => [['question'=>'Is visa needed?', 'answer'=>'Depends on your nationality...']],
+                    'trip_info' => [['label'=>'Group Size', 'value'=>'Max 15', 'icon'=>'👥']],
+                ],
+                // Data terjemahan
+                'translations' => [
+                    'en' => [
+                        'name' => 'Amazing Bali Adventure',
+                        'description' => 'Explore the natural and cultural beauty of Bali island over 5 days.',
+                        'location' => 'Bali, Indonesia',
+                        'category' => 'Adventure Tour',
+                    ],
+                    'id' => [
+                        'name' => 'Petualangan Bali Menakjubkan',
+                        'description' => 'Jelajahi keindahan alam dan budaya pulau Bali selama 5 hari.',
+                        'location' => 'Bali, Indonesia',
+                        'category' => 'Tur Petualangan',
+                    ],
+                ]
             ],
             [
-                'name' => 'Japanese Cultural Journey',
-                'description' => 'Explore the ancient temples of Kyoto and the bustling city of Tokyo.',
-                'number_of_days' => 10,
-                'price' => 2500.50,
-                'accommodation_details' => 'Mix of traditional Ryokans and modern city hotels.',
-                'itinerary' => json_encode([
-                    ['day' => 1, 'activity' => 'Arrive in Tokyo, explore Shinjuku.'],
-                    ['day' => 2, 'activity' => 'Visit Senso-ji Temple and Tokyo Skytree.'],
-                    ['day' => 3, 'activity' => 'Bullet train to Kyoto.'],
-                    ['day' => 4, 'activity' => 'Kinkaku-ji and Fushimi Inari Shrine.'],
-                ]),
-                'min_age' => null,
-                'max_age' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
+                 'main' => [
+                    'duration' => 3,
+                    'price_regular' => 3000000,
+                    'price_exclusive' => 2800000,
+                    'rating' => 4.5,
+                    'map_url' => 'https://maps.google.com/maps?q=yogyakarta', // Gunakan URL valid
+                    // Berikan array PHP biasa
+                    'itinerary' => [['day'=>1, 'title'=>'Yogyakarta City Tour', 'description'=>'Visit Keraton...']],
+                    'cost' => ['included'=>['Guide', 'Entrance Fees'], 'excluded'=>['Meals', 'Transport']],
+                    'faqs' => [], // Array kosong
+                    'trip_info' => [['label'=>'Guide Language', 'value'=>'English, Indonesian', 'icon'=>'🗣️']],
+                ],
+                'translations' => [
+                    'en' => [
+                        'name' => 'Yogyakarta Cultural Escape',
+                        'description' => 'Discover the rich culture of Yogyakarta.',
+                        'location' => 'Yogyakarta, Indonesia',
+                        'category' => 'Cultural Tour',
+                    ],
+                    'id' => [
+                        'name' => 'Liburan Budaya Yogyakarta',
+                        'description' => 'Temukan kekayaan budaya Yogyakarta.',
+                        'location' => 'Yogyakarta, Indonesia',
+                        'category' => 'Tur Budaya',
+                    ],
+                ]
             ],
-            [
-                'name' => 'Italian Riviera Escape',
-                'description' => 'Discover the charming coastal towns of Cinque Terre.',
-                'number_of_days' => 5,
-                'price' => 950.75,
-                'accommodation_details' => 'Boutique hotel in Monterosso al Mare.',
-                'itinerary' => json_encode([
-                    ['day' => 1, 'activity' => 'Arrival in La Spezia, check-in.'],
-                    ['day' => 2, 'activity' => 'Hike from Monterosso to Vernazza.'],
-                    ['day' => 3, 'activity' => 'Boat tour of the five towns.'],
-                ]),
-                'min_age' => 16,
-                'max_age' => 70,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Family Adventure in Costa Rica',
-                'description' => 'Ziplining, wildlife, and rainforest exploration for the whole family.',
-                'number_of_days' => 8,
-                'price' => 1800.00,
-                'accommodation_details' => 'Eco-lodges and family-friendly resorts.',
-                'itinerary' => json_encode([
-                    ['day' => 1, 'activity' => 'Arrive in San José.'],
-                    ['day' => 2, 'activity' => 'Arenal Volcano hike.'],
-                    ['day' => 3, 'activity' => 'Ziplining through the Monteverde Cloud Forest.'],
-                ]),
-                'min_age' => 8,
-                'max_age' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+            // --- Tambahkan data paket lainnya di sini ---
+        ];
+
+        foreach ($packagesData as $data) {
+            // 1. Buat record utama TANPA data terjemahan
+            // Eloquent $casts akan menangani konversi JSON di sini
+            $package = HolidayPackage::create($data['main']);
+
+            // 2. Loop melalui terjemahan dan simpan satu per satu
+            foreach ($data['translations'] as $locale => $translationData) {
+                $package->translateOrNew($locale)->fill($translationData);
+            }
+            // 3. Simpan semua terjemahan yang ditambahkan
+            $package->save();
+        }
     }
 }

@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 // --- Controller Imports ---
 use App\Http\Controllers\Api\Client\LoginController;
-use App\Http\Controllers\Api\Public\HolidayPackageController as PublicHolidayPackageController;
+use App\Http\Controllers\Api\Public\HolidayPackageController;
 use App\Http\Controllers\Api\Public\CarRentalController as PublicCarRentalController; // Correctly aliased
 use App\Http\Controllers\Api\Public\ActivityController as PublicActivityController;
 use App\Http\Controllers\Api\TripPlannerController;
@@ -13,7 +13,6 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
-use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,8 +29,9 @@ Route::post('/register', [LoginController::class, 'register']);
 Route::post('/login', [LoginController::class, 'login']);
 
 // --- Public Listings ---
-Route::get('/packages', [PublicHolidayPackageController::class, 'index']);
-Route::get('/packages/{holidayPackage}', [PublicHolidayPackageController::class, 'show']);
+// ✅ TAMBAHKAN/UBAH: Rute untuk Holiday Packages
+Route::get('/public/packages', [HolidayPackageController::class, 'index']);
+Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
 
 Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
 Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);

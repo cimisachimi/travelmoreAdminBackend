@@ -13,14 +13,24 @@ return new class extends Migration
     {
         Schema::create('holiday_packages', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->text('description')->nullable();
-            $table->integer('number_of_days');
-            $table->decimal('price', 8, 2); // Stores price like 999999.99
-            $table->text('accommodation_details');
-            $table->json('itinerary')->nullable(); // Flexible field for daily schedules
-            $table->unsignedTinyInteger('min_age')->nullable();
-            $table->unsignedTinyInteger('max_age')->nullable();
+
+            // Kolom Non-Terjemahan (Berdasarkan Model & Seeder)
+            $table->integer('duration')->nullable()->comment('Duration in days'); // From Seeder
+            $table->decimal('price_regular', 10, 2)->nullable(); // From Model & Seeder
+            $table->decimal('price_exclusive', 10, 2)->nullable(); // From Model & Seeder
+            $table->decimal('price_child', 10, 2)->nullable(); // From Model & Seeder
+            $table->decimal('rating', 2, 1)->nullable(); // From Model & Seeder
+            $table->text('map_url')->nullable(); // From Model & Seeder
+
+            // Kolom JSON (Berdasarkan Model & Seeder)
+            $table->json('itinerary')->nullable();
+            $table->json('cost')->nullable();
+            $table->json('faqs')->nullable();
+            $table->json('trip_info')->nullable();
+
+            // Kolom name, description, location, category DIHAPUS
+            // karena akan ada di tabel holiday_package_translations
+
             $table->timestamps();
         });
     }

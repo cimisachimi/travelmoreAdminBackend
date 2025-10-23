@@ -1,132 +1,163 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
-import { Badge } from '@/Components/ui/badge';
-import { MoreHorizontal, Info } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
-import { Button } from '@/Components/ui/button';
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/Components/ui/tooltip';
+import { Head, Link } from '@inertiajs/react'; // Import Link
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/Components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/Components/ui/table';
+import { Badge } from '@/Components/ui/badge'; // Import Badge
+import { Button } from '@/Components/ui/button'; // Import Button
+import { Eye } from 'lucide-react'; // Import an icon
 
-export default function OrderIndex({ auth, orders }) {
-
-  const formatCurrency = (amount) => new Intl.NumberFormat('id-ID', {
+// Helper to format currency
+const formatCurrency = (amount) => {
+  const numericAmount = Number(amount) || 0;
+  return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(amount);
+    minimumFractionDigits: 0,
+  }).format(numericAmount);
+};
 
-  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric'
+// Helper to format dates
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   });
+};
 
-  const getStatusBadgeVariant = (status) => {
-    switch (status) {
-      case 'paid':
-      case 'settlement':
-        return 'default'; // Greenish in shadcn/ui
-      case 'pending':
-        return 'secondary'; // Yellowish
-      case 'failed':
-      case 'cancelled':
-      case 'expire':
-        return 'destructive'; // Reddish
-      default:
-        return 'outline';
-    }
-  };
+// Helper to get a colored badge for status
+const getStatusBadge = (status) => {
+  switch (status) {
+    case 'pending':
+      return <Badge variant="outline">{status}</Badge>;
+    case 'paid':
+    case 'settlement': // For transaction
+      return <Badge className="bg-green-600 text-white">{status}</Badge>;
+    case 'partially_paid':
+      return <Badge className="bg-yellow-500 text-white">{status}</Badge>;
+    case 'delivered':
+      return <Badge className="bg-blue-600 text-white">{status}</Badge>;
+    case 'cancelled':
+    case 'expire': // For transaction
+      return <Badge variant="destructive">{status}</Badge>;
+    default:
+      return <Badge variant="secondary">{status || 'N/A'}</Badge>;
+  }
+};
 
-  // Helper to get the name of the booked item gracefully
-  const getBookableName = (booking) => {
-    if (!booking || !booking.bookable) {
-      return <span className="text-muted-foreground italic">Booking details missing</span>;
-    }
-    const { bookable } = booking;
-    // Handles different service types
-    return bookable.name || `${bookable.brand} ${bookable.car_model}`.trim();
-  };
-
+export default function Index({ auth, orders }) {
   return (
     <AuthenticatedLayout
       user={auth.user}
-      header="Order Management"
+      header="Orders Management" // Updated header
     >
       <Head title="Orders" />
+
       <Card>
         <CardHeader>
           <CardTitle>All Orders</CardTitle>
           <CardDescription>
-            A complete list of all customer orders and their statuses.
+            A list of all orders from customers.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[150px]">Order #</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Product Details</TableHead>
+                <TableHead>Items Ordered</TableHead>
+                <TableHead>Total Amount</TableHead>
+                <TableHead>Order Status</TableHead>
+                <TableHead>Payment Status</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead><span className="sr-only">Actions</span></TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">{order.order_number}</TableCell>
-                  <TableCell>
-                    <div className="font-medium">{order.user.name}</div>
-                    <div className="text-sm text-muted-foreground hidden md:block">{order.user.email}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{getBookableName(order.booking)}</div>
-                    {order.booking && (
+              {orders.data.length > 0 ? (
+                orders.data.map((order) => (
+                  <TableRow key={order.id}>
+                    {/* Customer Info */}
+                    <TableCell className="font-medium">
+                      <div>{order.user.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        Booking ID: {order.booking.id}
+                        {order.user.email}
                       </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {formatDate(order.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
-                      {order.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(order.total_amount)}</TableCell>
-                  <TableCell className="text-right">
-                    <TooltipProvider>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                <Info className="mr-2 h-4 w-4" />
-                                <span>View Details (soon)</span>
-                              </DropdownMenuItem>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Order details page coming soon.</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TooltipProvider>
+                    </TableCell>
+
+                    {/* Items Info */}
+                    <TableCell>
+                      <ul className="list-disc pl-4 text-sm">
+                        {order.order_items.map((item) => (
+                          <li key={item.id}>
+                            {item.quantity} x {item.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </TableCell>
+
+                    {/* Total Amount */}
+                    <TableCell className="font-semibold">
+                      {formatCurrency(order.total_amount)}
+                    </TableCell>
+
+                    {/* Order Status */}
+                    <TableCell>
+                      {getStatusBadge(order.status)}
+                    </TableCell>
+
+                    {/* Payment Status */}
+                    <TableCell>
+                      {getStatusBadge(order.transaction?.status)}
+                    </TableCell>
+
+                    {/* Date */}
+                    <TableCell>
+                      {formatDate(order.created_at)}
+                    </TableCell>
+
+                    {/* Actions (Example: View Details) */}
+                    <TableCell>
+                      {/* You would create this route in web.php and controller */}
+                      {/* <Link href={route('admin.orders.show', order.id)}>
+                                                <Button variant="outline" size="sm">
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
+                                            </Link> */}
+                      {/* Placeholder until show page exists */}
+                      <Button variant="outline" size="sm" disabled>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan="7"
+                    className="text-center"
+                  >
+                    No orders found.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>
+        {/* Add Pagination component here if needed */}
       </Card>
     </AuthenticatedLayout>
   );

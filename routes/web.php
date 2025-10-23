@@ -48,7 +48,19 @@ Route::middleware('auth')->group(function () {
     // --- ADMIN ROUTES ---
     Route::prefix('admin')->middleware('admin')->name('admin.')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
-        Route::get('/holiday-packages', [AdminHolidayPackageController::class, 'index'])->name('packages.index');
+
+        // ✅ Use Route::resource for Holiday Packages
+        Route::resource('holiday-packages', AdminHolidayPackageController::class)
+            ->names('packages'); // This defines index, create, store, show, edit, update, destroy routes with names like admin.packages.index, admin.packages.create, etc.
+        // Add these routes for package images
+        Route::post('/holiday-packages/{package}/images', [AdminHolidayPackageController::class, 'storeImage'])
+            ->name('packages.images.store');
+        Route::delete('/holiday-packages/{package}/images/{image}', [AdminHolidayPackageController::class, 'destroyImage'])
+            ->name('packages.images.destroy');
+        Route::post('/holiday-packages/{package}/thumbnail', [AdminHolidayPackageController::class, 'updateThumbnail'])
+            ->name('packages.thumbnail.update');
+
+
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index');
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('transactions.index');
         Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index');
@@ -56,8 +68,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
         Route::get('/dashboard', DashboardController::class)->name('admin.dashboard'); // Add this line
         // Car Rental Resource Routes
+        
         Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals');
-
         // Custom Car Rental Routes
         Route::post('/car-rentals/{carRental}/availability', [AdminCarRentalController::class, 'update_availability'])->name('rentals.update_availability');
         Route::post('/car-rentals/{carRental}/images', [AdminCarRentalController::class, 'storeImage'])->name('rentals.images.store');

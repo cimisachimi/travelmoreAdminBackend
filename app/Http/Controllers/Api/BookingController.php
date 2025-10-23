@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon; // ✅ Make sure Carbon is imported
-
+use App\Models\HolidayPackage; // ✅ PASTIKAN DI-IMPORT
 class BookingController extends Controller
 {
     /**
@@ -218,5 +218,73 @@ class BookingController extends Controller
             return response()->json(['message' => 'An error occurred while creating the booking.'], 500);
         }
         // --- END DATABASE TRANSACTION ---
+    }
+
+    public function storeHolidayPackageBooking(Request $request, $packageId)
+    {
+        // 1. Validasi Input
+        $validated = $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'adults' => 'required|integer|min:1',
+            'children' => 'required|integer|min:0',
+        ]);
+
+        $user = Auth::user();
+        $package = HolidayPackage::findOrFail($packageId);
+
+        // 2. Kalkulasi Harga
+        // Ambil harga dari Accessor model untuk konsistensi
+        $adultPrice = $package->exclusivePrice * $validated['adults'];
+        $childPrice = $package->childPrice * $validated['children'];
+        $totalPrice = $adultPrice + $childPrice;
+
+        // 3. Mulai Transaksi Database
+        DB::beginTransaction();
+        try {
+            // 3a. Buat Booking
+            $booking = $package->bookings()->create([
+                'user_id' => $user->id,
+                'start_date' => $validated['start_date'],
+                // Paket liburan mungkin tidak punya end_date, bisa null
+                'end_date' => null, 
+                'status' => 'pending',
+                'price' => $totalPrice,
+            ]);
+
+            // 3b. Buat Order
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
+                'total_amount' => $totalPrice,
+                'status' => 'pending',
+                'booking_id' => $booking->id, // Tautkan ke booking
+            ]);
+
+            // 3c. Buat Order Item
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $package->id,
+                'orderable_type' => HolidayPackage::class,
+                'name' => $package->name,
+                'quantity' => 1, // 1 paket
+                'price' => $totalPrice,
+                'options' => [ // Simpan detail jumlah orang
+                    'start_date' => $validated['start_date'],
+                    'adults' => $validated['adults'],
+                    'children' => $validated['children'],
+                    'duration_days' => $package->duration,
+                ]
+            ]);
+
+            // 4. Commit Transaksi
+            DB::commit();
+
+            // 5. Kembalikan data Order (frontend akan pindah ke halaman pembayaran)
+            return response()->json($order, 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal membuat booking: ' . $e->getMessage()], 500);
+        }
     }
 }

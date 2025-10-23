@@ -9,70 +9,30 @@ use Illuminate\Http\Request;
 class HolidayPackageController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Get all holiday packages.
+     * Translation is handled automatically based on App::getLocale().
      */
     public function index()
     {
-        return HolidayPackage::all();
+        // Eager load non-translated relationships if needed
+        $packages = HolidayPackage::with('images')
+            ->latest()
+            ->paginate(10); // Or ->get() if no pagination
+
+        // Translated attributes (name, description, etc.) are included automatically
+        return response()->json($packages);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Get a single holiday package by ID.
+     * Translation is handled automatically based on App::getLocale().
      */
-    public function store(Request $request)
+    public function show($id)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'number_of_days' => 'required|integer|min:1',
-            'price' => 'required|numeric|min:0',
-            'accommodation_details' => 'required|string',
-            'itinerary' => 'nullable|json',
-            'min_age' => 'nullable|integer|min:0',
-            'max_age' => 'nullable|integer|gt:min_age',
-        ]);
+        // Eager load non-translated relationships if needed
+        $package = HolidayPackage::with('images')->findOrFail($id);
 
-        $package = HolidayPackage::create($validatedData);
-
-        return response()->json($package, 201);
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(HolidayPackage $holidayPackage)
-    {
-        return $holidayPackage;
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, HolidayPackage $holidayPackage)
-    {
-        $validatedData = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'description' => 'sometimes|nullable|string',
-            'number_of_days' => 'sometimes|required|integer|min:1',
-            'price' => 'sometimes|required|numeric|min:0',
-            'accommodation_details' => 'sometimes|required|string',
-            'itinerary' => 'sometimes|nullable|json',
-            'min_age' => 'sometimes|nullable|integer|min:0',
-            'max_age' => 'sometimes|nullable|integer|gt:min_age',
-        ]);
-
-        $holidayPackage->update($validatedData);
-
-        return response()->json($holidayPackage);
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(HolidayPackage $holidayPackage)
-    {
-        $holidayPackage->delete();
-
-        return response()->json(null, 204);
+        // Translated attributes are included automatically
+        return response()->json($package);
     }
 }

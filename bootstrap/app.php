@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\ApplySecurityHeaders;
+use App\Http\Middleware\SetLocaleFromHeader;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // This keeps your Inertia middleware for the admin panel.
         $middleware->web(append: [
+            SetLocaleFromHeader::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             ApplySecurityHeaders::class,
