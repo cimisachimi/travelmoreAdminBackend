@@ -49,14 +49,15 @@ class HolidayPackage extends Model implements TranslatableContract
         'trip_info' => 'array',
     ];
 
-    // $appends tetap sama
+    // [FIX 1] Add 'thumbnail_url' to the $appends array
     protected $appends = [
         'images_url',
         'regularPrice',
         'exclusivePrice',
         'childPrice',
-        'tripInfo', // Accessor ini mengambil dari tabel utama
-        'mapUrl'
+        'tripInfo',
+        'mapUrl',
+        'thumbnail_url', // <-- ADD THIS LINE
     ];
 
     // Relasi (tetap sama)
@@ -72,11 +73,35 @@ class HolidayPackage extends Model implements TranslatableContract
 
     // ----- ACCESSORS -----
 
+    // [FIX 2] Add the new accessor method for the thumbnail
+    public function getThumbnailUrlAttribute()
+    {
+        // The 'images' relation is eager loaded by with('images') in the controller
+        // We find the first image that is marked as a 'thumbnail'
+        $thumbnail = $this->images->firstWhere('type', 'thumbnail');
+
+        if ($thumbnail) {
+            // The Image model already has a 'full_url' accessor
+            return $thumbnail->full_url;
+        }
+
+        // Optional: fallback to the *first* image if no thumbnail is set
+        // $firstImage = $this->images->first();
+        // if ($firstImage) {
+        //     return $firstImage->full_url;
+        // }
+
+        // Otherwise, return null
+        return null;
+    }
+
+
     // Accessor images_url (tetap sama)
     public function getImagesUrlAttribute()
     {
         return $this->images->map(function ($image) {
-            return Storage::url($image->path);
+            // Assuming your Image model has a 'full_url' accessor
+            return $image->full_url; 
         });
     }
 
@@ -104,6 +129,8 @@ class HolidayPackage extends Model implements TranslatableContract
      // Accessor tripInfo (mengambil dari tabel utama)
      public function getTripInfoAttribute()
      {
+         // This is wrong, it should be $this->attributes['trip_info']
+         // But based on your casts, it's already an array.
          return $this->attributes['trip_info'] ?? [];
      }
 

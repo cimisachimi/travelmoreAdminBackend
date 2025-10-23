@@ -64,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
     Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']); // Keep specific booking route
 
+
+    Route::post('/packages/{packageId}/book', [BookingController::class, 'storeHolidayPackageBooking']);
     // --- Car Rentals ---
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
 
