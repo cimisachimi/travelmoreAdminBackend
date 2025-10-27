@@ -10,7 +10,7 @@ import { ArrowLeft, Upload, Package, Clock, DollarSign, Star, MapPin, Plus, Tras
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import React, { useState } from "react";
 import { toast } from 'sonner'; // Added toast for feedback
-
+import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater'; // Adjust path if needed
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
 // --- HELPER COMPONENTS ---
@@ -382,9 +382,7 @@ export default function CreateHolidayPackage({ auth }) {
   const { data, setData, post, processing, errors, reset } = useForm({
     // Non-translated fields
     duration: '',
-    price_regular: '',
-    price_exclusive: '',
-    price_child: '',
+    price_tiers: [], // For Create.jsx
     rating: '',
     map_url: '',
 
@@ -463,19 +461,12 @@ export default function CreateHolidayPackage({ auth }) {
                       <InputError message={errors.duration} className="mt-1" />
                     </div>
                     <div>
-                      <Label htmlFor="price_regular">Regular Price (IDR) <span className="text-red-500">*</span></Label>
-                      <Input id="price_regular" type="number" step="0.01" value={data.price_regular} onChange={e => setData('price_regular', e.target.value)} required className={errors.price_regular ? 'border-red-500' : ''} />
-                      <InputError message={errors.price_regular} className="mt-1" />
-                    </div>
-                    <div>
-                      <Label htmlFor="price_exclusive">Exclusive Price (IDR) <span className="text-red-500">*</span></Label>
-                      <Input id="price_exclusive" type="number" step="0.01" value={data.price_exclusive} onChange={e => setData('price_exclusive', e.target.value)} required className={errors.price_exclusive ? 'border-red-500' : ''} />
-                      <InputError message={errors.price_exclusive} className="mt-1" />
-                    </div>
-                    <div>
-                      <Label htmlFor="price_child">Child Price (IDR)</Label>
-                      <Input id="price_child" type="number" step="0.01" value={data.price_child} onChange={e => setData('price_child', e.target.value)} className={errors.price_child ? 'border-red-500' : ''} />
-                      <InputError message={errors.price_child} className="mt-1" />
+                      <h3 className="text-lg font-medium mb-3">Tiered Pricing</h3>
+                      <PriceTiersRepeater
+                        items={data.price_tiers}
+                        setData={setData}
+                        errors={errors}
+                      />
                     </div>
                     <div>
                       <Label htmlFor="rating">Rating (0-5)</Label>

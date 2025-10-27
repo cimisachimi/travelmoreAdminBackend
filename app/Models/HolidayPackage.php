@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Storage;
 // Impor Translatable
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
 use Astrotomic\Translatable\Translatable;
+// [NEW] Add Attribute cast
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class HolidayPackage extends Model implements TranslatableContract
 {
@@ -24,12 +26,13 @@ class HolidayPackage extends Model implements TranslatableContract
     // Hapus atribut terjemahan dari fillable utama
     protected $fillable = [
         'duration',
-        'price_regular',
-        'price_exclusive',
-        'price_child',
+        // 'price_regular',    // [REMOVED]
+        // 'price_exclusive',  // [REMOVED]
+        // 'price_child',      // [REMOVED]
+        'price_tiers', // [NEW] Add price_tiers
         'rating',
         'map_url',
-        // Field JSON (tidak diterjemahkan dalam contoh ini)
+        // Field JSON
         'itinerary',
         'cost',
         'faqs',
@@ -38,11 +41,12 @@ class HolidayPackage extends Model implements TranslatableContract
 
     // Casts untuk kolom non-terjemahan
     protected $casts = [
-        'price_regular' => 'decimal:2',
-        'price_exclusive' => 'decimal:2',
-        'price_child' => 'decimal:2',
+        // 'price_regular' => 'decimal:2',   // [REMOVED]
+        // 'price_exclusive' => 'decimal:2', // [REMOVED]
+        // 'price_child' => 'decimal:2',   // [REMOVED]
         'rating' => 'decimal:1',
-        // Cast JSON (tidak diterjemahkan dalam contoh ini)
+        'price_tiers' => 'array', // [NEW] Cast price_tiers
+        // Cast JSON
         'itinerary' => 'array',
         'cost' => 'array',
         'faqs' => 'array',
@@ -52,12 +56,12 @@ class HolidayPackage extends Model implements TranslatableContract
     // [FIX 1] Add 'thumbnail_url' to the $appends array
     protected $appends = [
         'images_url',
-        'regularPrice',
-        'exclusivePrice',
-        'childPrice',
+        // 'regularPrice',    // [REMOVED]
+        // 'exclusivePrice',  // [REMOVED]
+        // 'childPrice',      // [REMOVED]
         'tripInfo',
         'mapUrl',
-        'thumbnail_url', // <-- ADD THIS LINE
+        'thumbnail_url',
     ];
 
     // Relasi (tetap sama)
@@ -76,22 +80,11 @@ class HolidayPackage extends Model implements TranslatableContract
     // [FIX 2] Add the new accessor method for the thumbnail
     public function getThumbnailUrlAttribute()
     {
-        // The 'images' relation is eager loaded by with('images') in the controller
-        // We find the first image that is marked as a 'thumbnail'
         $thumbnail = $this->images->firstWhere('type', 'thumbnail');
 
         if ($thumbnail) {
-            // The Image model already has a 'full_url' accessor
             return $thumbnail->full_url;
         }
-
-        // Optional: fallback to the *first* image if no thumbnail is set
-        // $firstImage = $this->images->first();
-        // if ($firstImage) {
-        //     return $firstImage->full_url;
-        // }
-
-        // Otherwise, return null
         return null;
     }
 
@@ -100,37 +93,18 @@ class HolidayPackage extends Model implements TranslatableContract
     public function getImagesUrlAttribute()
     {
         return $this->images->map(function ($image) {
-            // Assuming your Image model has a 'full_url' accessor
-            return $image->full_url; 
+            return $image->full_url;
         });
     }
 
-    // Accessor harga (tetap sama)
-    public function getRegularPriceAttribute()
-    {
-        return $this->attributes['price_regular'];
-    }
+    // [REMOVED] Old Price Accessors
+    // public function getRegularPriceAttribute() { ... }
+    // public function getExclusivePriceAttribute() { ... }
+    // public function getChildPriceAttribute() { ... }
 
-    public function getExclusivePriceAttribute()
-    {
-        return $this->attributes['price_exclusive'];
-    }
-
-    public function getChildPriceAttribute()
-    {
-        $childPrice = $this->attributes['price_child'] ?? 0;
-        $exclusivePrice = $this->attributes['price_exclusive'] ?? 0;
-        if ($childPrice > 0) {
-            return $childPrice;
-        }
-        return $exclusivePrice * 0.5;
-    }
-
-     // Accessor tripInfo (mengambil dari tabel utama)
+     // Accessor tripInfo (tetap sama)
      public function getTripInfoAttribute()
      {
-         // This is wrong, it should be $this->attributes['trip_info']
-         // But based on your casts, it's already an array.
          return $this->attributes['trip_info'] ?? [];
      }
 
@@ -139,5 +113,74 @@ class HolidayPackage extends Model implements TranslatableContract
     public function getMapUrlAttribute()
     {
         return $this->attributes['map_url'];
+    }
+
+
+    // ----- [NEW] TIERED PRICING METHODS -----
+
+    /**
+     * Get the price per person based on the total number of participants.
+     *
+     * @param int $paxCount The total number of participants (e.g., adults + children)
+     * @return float|null The price per pax, or null if no price is found
+     */
+    public function getPricePerPax(int $paxCount): ?float
+    {
+        // Use the accessor to ensure price_tiers is a sorted array
+        $priceTiers = $this->price_tiers;
+
+        if (empty($priceTiers)) {
+            // No fallback, as requested.
+            return null;
+        }
+
+        foreach ($priceTiers as $tier) {
+            $minPax = $tier['min_pax'] ?? 0;
+            // If max_pax is null/empty/0, treat it as "and above" for that tier
+            $maxPax = $tier['max_pax'] ?? null;
+
+            // Case 1: Tier has min and max (e.g., 6-10 pax)
+            if ($maxPax && $maxPax > 0) {
+                if ($paxCount >= $minPax && $paxCount <= $maxPax) {
+                    return (float)($tier['price'] ?? 0);
+                }
+            }
+            // Case 2: Tier only has min (e.g., 21+ pax)
+            // This will match if it's the last tier (due to sorting)
+            else {
+                if ($paxCount >= $minPax) {
+                    return (float)($tier['price'] ?? 0);
+                }
+            }
+        }
+        
+        // If $paxCount is lower than the first tier's min_pax, or no tier matches
+        return null;
+    }
+
+    /**
+     * [NEW] Accessor/Mutator for price_tiers.
+     *
+     * Ensures 'price_tiers' is always an array when retrieved
+     * and properly encoded as JSON when set.
+     * It also sorts the tiers by 'min_pax' automatically.
+     */
+    protected function priceTiers(): Attribute
+    {
+        return Attribute::make(
+            get: function ($value) {
+                $tiers = json_decode($value ?: '[]', true);
+                // Sort by min_pax ascending
+                usort($tiers, fn ($a, $b) => ($a['min_pax'] ?? 0) <=> ($b['min_pax'] ?? 0));
+                return $tiers;
+            },
+            set: function ($value) {
+                if (is_array($value)) {
+                    // Ensure keys are reset if it's a sparse array from the frontend
+                    $value = array_values($value); 
+                }
+                return json_encode($value ?: []);
+            }
+        );
     }
 }

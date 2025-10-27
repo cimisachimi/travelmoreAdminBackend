@@ -12,13 +12,14 @@ import { router } from "@inertiajs/react";
 import React, { useEffect, useState } from "react";
 import { Badge } from "@/Components/ui/badge";
 import { toast } from 'sonner';
+// [NEW] Make sure this path is correct for your project
+import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater'; // Or '@/Components/PriceTiersRepeater'
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
 // --- HELPER COMPONENTS ---
 
 // --- Thumbnail Manager Component ---
-// (This component is unchanged from the previous answer)
 const ThumbnailManager = ({ pkg }) => {
   const [processing, setProcessing] = useState(false);
   const [thumbnailError, setThumbnailError] = useState(null);
@@ -93,18 +94,14 @@ const ThumbnailManager = ({ pkg }) => {
 
 
 // --- Helper function to get translation safely ---
-// (This component is unchanged from the previous answer)
 const getCurrentTranslation = (pkg, field, fallback = '') => {
   return pkg?.translations?.en?.[field] || pkg?.translations?.id?.[field] || fallback;
 };
 
 
-// --- [FIXED] Component for Translation Fields ---
-// This now reads/writes to data.name.en, data.description.en, etc.
+// --- Component for Translation Fields ---
 const TranslationFields = ({ locale, data, setData, errors }) => {
-  // Update the correct "field-first" nested structure
   const handleChange = (field, value) => {
-    // Sets `name.en`, `description.en`, etc.
     setData(`${field}.${locale}`, value);
   };
 
@@ -114,16 +111,12 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
         <Label htmlFor={`name_${locale}`}>Package Name ({locale.toUpperCase()}) <span className="text-red-500">*</span></Label>
         <Input
           id={`name_${locale}`}
-          // Access: data.name.en or data.name.id
           value={data.name?.[locale] || ''}
           onChange={e => handleChange('name', e.target.value)}
           required
-          // Error key is `name.en` or `name.id`
           className={errors?.[`name.${locale}`] ? 'border-red-500' : ''}
         />
-        {/* Show locale-specific error */}
         <InputError message={errors?.[`name.${locale}`]} className="mt-1" />
-        {/* Show parent 'name' error on the 'en' tab for visibility */}
         {locale === 'en' && errors?.name && <InputError message={errors.name} className="mt-1" />}
       </div>
 
@@ -131,11 +124,9 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
         <Label htmlFor={`description_${locale}`}>Description ({locale.toUpperCase()})</Label>
         <Textarea
           id={`description_${locale}`}
-          // Access: data.description.en
           value={data.description?.[locale] || ''}
           onChange={e => handleChange('description', e.target.value)}
           rows={5}
-          // Error key is `description.en`
           className={errors?.[`description.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`description.${locale}`]} className="mt-1" />
@@ -146,10 +137,8 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
         <Label htmlFor={`location_${locale}`}>Location ({locale.toUpperCase()})</Label>
         <Input
           id={`location_${locale}`}
-          // Access: data.location.en
           value={data.location?.[locale] || ''}
           onChange={e => handleChange('location', e.target.value)}
-          // Error key is `location.en`
           className={errors?.[`location.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`location.${locale}`]} className="mt-1" />
@@ -160,10 +149,8 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
         <Label htmlFor={`category_${locale}`}>Category ({locale.toUpperCase()})</Label>
         <Input
           id={`category_${locale}`}
-          // Access: data.category.en
           value={data.category?.[locale] || ''}
           onChange={e => handleChange('category', e.target.value)}
-          // Error key is `category.en`
           className={errors?.[`category.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`category.${locale}`]} className="mt-1" />
@@ -175,8 +162,7 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
 
 
 // --- Repeater Components (Itinerary, Cost, Faqs, TripInfo) ---
-// (These components are unchanged from the previous answer)
-// ...
+
 // Repeater for Itinerary
 const ItineraryRepeater = ({ items = [], setData, errors }) => {
   const handleItineraryChange = (index, field, value) => {
@@ -355,9 +341,9 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
     </div>
   );
 };
-// ...
 // --- End of Repeater Components ---
 
+// --- [NEW] Helper function to safely parse JSON or return default ---
 const safeParseJson = (jsonData, defaultValue) => {
   // If it's already a valid object/array (and not null), return it
   if (typeof jsonData === 'object' && jsonData !== null) {
@@ -365,9 +351,10 @@ const safeParseJson = (jsonData, defaultValue) => {
     if (Array.isArray(defaultValue) && Array.isArray(jsonData)) return jsonData;
     if (!Array.isArray(defaultValue) && !Array.isArray(jsonData)) {
       // Basic check for cost structure
-      if (jsonData.hasOwnProperty('included') && jsonData.hasOwnProperty('excluded')) return jsonData;
-      // If defaultValue is cost structure but jsonData isn't, return default
-      if (defaultValue.hasOwnProperty('included') && defaultValue.hasOwnProperty('excluded')) return defaultValue;
+      if (defaultValue.hasOwnProperty('included') && defaultValue.hasOwnProperty('excluded')) {
+        // If it has the keys, return it, otherwise return default
+        return (jsonData.hasOwnProperty('included') && jsonData.hasOwnProperty('excluded')) ? jsonData : defaultValue;
+      }
       return jsonData; // Return other non-array objects
     }
     // Mismatch between array/object type, return default
@@ -397,6 +384,7 @@ const safeParseJson = (jsonData, defaultValue) => {
   }
 };
 // --- END OF MOVE ---
+
 // --- [UPDATED] Main Edit Form Component ---
 const EditPackageForm = ({ pkg }) => {
   // Helper to safely get translation data for initialization
@@ -405,9 +393,12 @@ const EditPackageForm = ({ pkg }) => {
   const { data, setData, post, processing, errors, reset, isDirty } = useForm({
     // Non-translated fields
     duration: pkg.duration || '',
-    price_regular: pkg.price_regular || '',
-    price_exclusive: pkg.price_exclusive || '',
-    price_child: pkg.price_child || '',
+    // [REMOVED] price_regular: pkg.price_regular || '',
+    // [REMOVED] price_exclusive: pkg.price_exclusive || '',
+    // [REMOVED] price_child: pkg.price_child || '',
+
+    // [CORRECTED] Use 'pkg' prop, not undefined 'holidayPackage'
+    price_tiers: pkg.price_tiers || [],
     rating: pkg.rating || '',
     map_url: pkg.map_url || '',
 
@@ -437,16 +428,18 @@ const EditPackageForm = ({ pkg }) => {
 
     _method: 'PUT'
   });
-  // --- [NEW] Helper function to safely parse JSON or return default ---
 
   // Reset form if the package data prop changes
   useEffect(() => {
     reset({
       // Non-translated fields
       duration: pkg.duration || '',
-      price_regular: pkg.price_regular || '',
-      price_exclusive: pkg.price_exclusive || '',
-      price_child: pkg.price_child || '',
+      // [REMOVED] price_regular: pkg.price_regular || '',
+      // [REMOVED] price_exclusive: pkg.price_exclusive || '',
+      // [REMOVED] price_child: pkg.price_child || '',
+
+      // [CORRECTED] Use 'pkg' prop
+      price_tiers: pkg.price_tiers || [],
       rating: pkg.rating || '',
       map_url: pkg.map_url || '',
 
@@ -503,24 +496,53 @@ const EditPackageForm = ({ pkg }) => {
           <TabsTrigger value="structured">Structured Data</TabsTrigger>
         </TabsList>
 
-        {/* Core Details Tab (Unchanged) */}
+        {/* [UPDATED] Core Details Tab */}
         <TabsContent value="core">
           <Card>
             <CardHeader>
               <CardTitle>Core Details (Non-Translatable)</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="duration">Duration (Days) <span className="text-red-500">*</span></Label><Input id="duration" type="number" value={data.duration} onChange={e => setData('duration', e.target.value)} required className={errors.duration ? 'border-red-500' : ''} /><InputError message={errors.duration} className="mt-1" /></div>
-              <div><Label htmlFor="price_regular">Regular Price (IDR) <span className="text-red-500">*</span></Label><Input id="price_regular" type="number" step="0.01" value={data.price_regular} onChange={e => setData('price_regular', e.target.value)} required className={errors.price_regular ? 'border-red-500' : ''} /><InputError message={errors.price_regular} className="mt-1" /></div>
-              <div><Label htmlFor="price_exclusive">Exclusive Price (IDR) <span className="text-red-500">*</span></Label><Input id="price_exclusive" type="number" step="0.01" value={data.price_exclusive} onChange={e => setData('price_exclusive', e.target.value)} required className={errors.price_exclusive ? 'border-red-500' : ''} /><InputError message={errors.price_exclusive} className="mt-1" /></div>
-              <div><Label htmlFor="price_child">Child Price (IDR)</Label><Input id="price_child" type="number" step="0.01" value={data.price_child} onChange={e => setData('price_child', e.target.value)} className={errors.price_child ? 'border-red-500' : ''} /><InputError message={errors.price_child} className="mt-1" /></div>
-              <div><Label htmlFor="rating">Rating (0-5)</Label><Input id="rating" type="number" step="0.1" min="0" max="5" value={data.rating} onChange={e => setData('rating', e.target.value)} className={errors.rating ? 'border-red-500' : ''} /><InputError message={errors.rating} className="mt-1" /></div>
-              <div><Label htmlFor="map_url">Map URL</Label><Input id="map_url" type="url" value={data.map_url} onChange={e => setData('map_url', e.target.value)} className={errors.map_url ? 'border-red-500' : ''} /><InputError message={errors.map_url} className="mt-1" /></div>
+            <CardContent className="space-y-6"> {/* Use space-y for stacking */}
+
+              {/* Grid for basic inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="duration">Duration (Days) <span className="text-red-500">*</span></Label>
+                  <Input id="duration" type="number" value={data.duration} onChange={e => setData('duration', e.target.value)} required className={errors.duration ? 'border-red-500' : ''} />
+                  <InputError message={errors.duration} className="mt-1" />
+                </div>
+
+                {/* [REMOVED] Old Price Input */}
+                {/* <div><Label htmlFor="price_regular">Regular Price (IDR) <span className="text-red-500">*</span></Label><Input id="price_regular" type="number" step="0.01" value={data.price_regular} onChange={e => setData('price_regular', e.target.value)} required className={errors.price_regular ? 'border-red-500' : ''} /><InputError message={errors.price_regular} className="mt-1" /></div> */}
+
+                <div>
+                  <Label htmlFor="rating">Rating (0-5)</Label>
+                  <Input id="rating" type="number" step="0.1" min="0" max="5" value={data.rating} onChange={e => setData('rating', e.target.value)} className={errors.rating ? 'border-red-500' : ''} />
+                  <InputError message={errors.rating} className="mt-1" />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="map_url">Map URL</Label>
+                  <Input id="map_url" type="url" value={data.map_url} onChange={e => setData('map_url', e.target.value)} className={errors.map_url ? 'border-red-500' : ''} />
+                  <InputError message={errors.map_url} className="mt-1" />
+                </div>
+              </div>
+
+              {/* [NEW] Price Tiers Section (now outside the grid) */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-medium mb-3">Tiered Pricing <span className="text-red-500">*</span></h3>
+                <PriceTiersRepeater
+                  items={data.price_tiers}
+                  setData={setData}
+                  errors={errors}
+                />
+              </div>
+
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Translations Tab (Unchanged) */}
+        {/* Translations Tab */}
         <TabsContent value="translations">
           <Card>
             <CardHeader>
@@ -543,7 +565,7 @@ const EditPackageForm = ({ pkg }) => {
           </Card>
         </TabsContent>
 
-        {/* Structured Data Tab (Repeaters - Unchanged) */}
+        {/* Structured Data Tab (Repeaters) */}
         <TabsContent value="structured">
           <div className="space-y-6">
             <Card>
@@ -574,7 +596,6 @@ const EditPackageForm = ({ pkg }) => {
 };
 
 // Component for Managing Images (Gallery)
-// (This component is unchanged from the previous answer)
 const GalleryManager = ({ pkg }) => {
   const { data: imageData, setData: setImageData, post: postImages, processing: imageProcessing, errors: imageErrors, reset: resetImageForm } = useForm({
     images: [],
@@ -619,6 +640,9 @@ const GalleryManager = ({ pkg }) => {
     }
   };
 
+  // Filter for gallery images (non-thumbnail)
+  const galleryImages = pkg.images?.filter(img => img.type !== 'thumbnail');
+
   return (
     <div className="space-y-6">
       <div>
@@ -643,9 +667,9 @@ const GalleryManager = ({ pkg }) => {
       </div>
       <div>
         <h3 className="text-lg font-medium">Current Gallery</h3>
-        {pkg.images?.filter(img => img.type === 'gallery').length > 0 ? (
+        {galleryImages?.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-            {pkg.images.filter(img => img.type === 'gallery').map(image => (
+            {galleryImages.map(image => (
               <div key={image.id} className="relative group aspect-square">
                 <img
                   src={image.full_url}
@@ -667,7 +691,6 @@ const GalleryManager = ({ pkg }) => {
 };
 
 // --- MAIN EDIT PAGE COMPONENT ---
-// (This component is unchanged from the previous answer)
 export default function EditHolidayPackage({ auth, package: pkg }) {
   const currentName = getCurrentTranslation(pkg, 'name', `Package #${pkg.id}`);
 

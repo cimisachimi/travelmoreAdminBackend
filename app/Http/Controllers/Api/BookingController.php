@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Carbon\Carbon; // ✅ Make sure Carbon is imported
-use App\Models\HolidayPackage; // ✅ PASTIKAN DI-IMPORT
+use Carbon\Carbon;
+use App\Models\HolidayPackage;
+
 class BookingController extends Controller
 {
     /**
@@ -60,7 +61,7 @@ class BookingController extends Controller
             // 1. Create the Order with DP and Deadline
             $order = new Order([
                 'user_id' => $user->id,
-                'order_number' => 'ORD-' . strtoupper(Str::random(10)),
+                'order_number' => 'ORD-CAR-' . strtoupper(Str::random(6)) . time(),
                 'total_amount' => $totalPrice,
                 'status' => 'pending', // Initial status
                 'payment_deadline' => $paymentDeadline, // ✅ Store deadline
@@ -96,7 +97,6 @@ class BookingController extends Controller
             $order->save();
 
             // 5. UPDATE AVAILABILITY (remains the same)
-            // ✅ This is correct: mark as 'booked' immediately to reserve.
             CarRentalAvailability::where('car_rental_id', $carRental->id)
                 ->whereBetween('date', [$startDate, $endDate])
                 ->update(['status' => 'booked']);
@@ -116,6 +116,7 @@ class BookingController extends Controller
         }
         // --- END DATABASE TRANSACTION ---
     }
+    
     /**
      * Display a listing of the user's bookings.
      */
@@ -162,47 +163,66 @@ class BookingController extends Controller
 
     /**
      * Store a booking for a Trip Planner.
+     *
+     * [--- UPDATED FUNCTION ---]
      */
     public function storeTripPlannerBooking(Request $request)
     {
-        $validated = $request->validate([
-            'trip_planner_id' => 'required|exists:trip_planners,id',
-            // Maybe add date validation if Trip Planners have specific dates
-        ]);
-
         $user = Auth::user();
-        $tripPlanner = TripPlanner::findOrFail($validated['trip_planner_id']);
+        
+        // 1. Find the planner associated with this user.
+        $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
 
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
+        $totalPrice = $tripPlanner->price; // Get price from the planner
+        
+        // 2. Set payment details
+        $downPayment = $totalPrice * 0.5; // 50% DP
+        $paymentDeadline = Carbon::now()->addHours(2); // 2-hour deadline
 
         // --- START DATABASE TRANSACTION ---
         try {
             DB::beginTransaction();
 
-            // 1. Create the Booking
-            $booking = new Booking([
+            // 3. Create the Order
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-PLAN-' . strtoupper(Str::random(6)) . time(),
+                'total_amount' => $totalPrice,
+                'status' => 'pending', // Initial status
+                'payment_deadline' => $paymentDeadline, // Store deadline
+                'down_payment_amount' => $downPayment, // Store 50% DP amount
+            ]);
+
+            // 4. Create the Booking
+            $booking = $tripPlanner->bookings()->create([
                 'user_id' => $user->id,
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
-                'total_price' => $tripPlanner->price,
+                'total_price' => $totalPrice,
                 'booking_date' => $tripDate,
                 'start_date' => $tripDate,
-                'end_date' => $tripDate,
+                'end_date' => null, // Planners might not have an end date
+                'details' => [
+                    'full_name' => $tripPlanner->full_name,
+                    'email' => $tripPlanner->email,
+                    'trip_type' => $tripPlanner->trip_type,
+                    'travel_type' => $tripPlanner->travel_type,
+                ]
             ]);
 
-            $tripPlanner->bookings()->save($booking);
+            // 5. Link the Order to the Booking
+            $order->booking_id = $booking->id;
+            $order->save();
 
-            // 2. Create the Order
-            $order = new Order([
-                'user_id' => $user->id,
-                'booking_id' => $booking->id,
+            // 6. [CRITICAL FIX] Create the OrderItem
+            OrderItem::create([
+                'order_id' => $order->id,
                 'orderable_id' => $tripPlanner->id,
                 'orderable_type' => TripPlanner::class,
-                'total_amount' => $tripPlanner->price,
-                'status' => 'pending',
-                'order_number' => 'ORD-' . Str::uuid(),
+                'quantity' => 1,
+                'price' => $totalPrice,
             ]);
-            $order->save();
 
             DB::commit();
 
@@ -214,77 +234,92 @@ class BookingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Trip planner booking failed: ' . $e->getMessage());
+            Log::error('Trip planner booking failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             return response()->json(['message' => 'An error occurred while creating the booking.'], 500);
         }
         // --- END DATABASE TRANSACTION ---
     }
 
+    /**
+     * Store a booking for a Holiday Package.
+     *
+     * [--- THIS IS THE CORRECT, UPDATED VERSION ---]
+     */
     public function storeHolidayPackageBooking(Request $request, $packageId)
     {
-        // 1. Validasi Input
         $validated = $request->validate([
             'start_date' => 'required|date|after_or_equal:today',
             'adults' => 'required|integer|min:1',
-            'children' => 'required|integer|min:0',
+            'children' => 'sometimes|integer|min:0',
         ]);
 
         $user = Auth::user();
         $package = HolidayPackage::findOrFail($packageId);
 
-        // 2. Kalkulasi Harga
-        // Ambil harga dari Accessor model untuk konsistensi
-        $adultPrice = $package->exclusivePrice * $validated['adults'];
-        $childPrice = $package->childPrice * $validated['children'];
-        $totalPrice = $adultPrice + $childPrice;
+        $adultsCount = $validated['adults'];
+        $childrenCount = $validated['children'] ?? 0;
+        $totalPax = $adultsCount + $childrenCount;
 
-        // 3. Mulai Transaksi Database
+        // --- [CORRECT] Get Price Per Pax using the model method ---
+        $pricePerPax = $package->getPricePerPax($totalPax);
+
+        // --- [CORRECT] Check if a price was found ---
+        if ($pricePerPax === null) {
+            return response()->json([
+                'message' => 'Pricing is not available for the selected number of participants.'
+            ], 400);
+        }
+
+        $totalPrice = $pricePerPax * $totalPax;
+        $downPayment = $totalPrice * 0.5; 
+        $paymentDeadline = now()->addHours(2);
+
         DB::beginTransaction();
         try {
-            // 3a. Buat Booking
-            $booking = $package->bookings()->create([
-                'user_id' => $user->id,
-                'start_date' => $validated['start_date'],
-                // Paket liburan mungkin tidak punya end_date, bisa null
-                'end_date' => null, 
-                'status' => 'pending',
-                'price' => $totalPrice,
-            ]);
-
-            // 3b. Buat Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
                 'total_amount' => $totalPrice,
                 'status' => 'pending',
-                'booking_id' => $booking->id, // Tautkan ke booking
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
             ]);
 
-            // 3c. Buat Order Item
+            $booking = $package->bookings()->create([
+                'user_id' => $user->id,
+                'booking_date' => $validated['start_date'],
+                'start_date' => $validated['start_date'],
+                'end_date' => Carbon::parse($validated['start_date'])->addDays($package->duration - 1)->toDateString(),
+                'status' => 'pending',
+                'total_price' => $totalPrice,
+                'payment_status' => 'unpaid',
+                'details' => [
+                    'adults' => $adultsCount,
+                    'children' => $childrenCount,
+                    'total_pax' => $totalPax,
+                    'price_per_pax' => $pricePerPax, // Store the calculated price
+                ]
+            ]);
+
+            $order->booking_id = $booking->id;
+            $order->save();
+
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
                 'orderable_type' => HolidayPackage::class,
-                'name' => $package->name,
-                'quantity' => 1, // 1 paket
-                'price' => $totalPrice,
-                'options' => [ // Simpan detail jumlah orang
-                    'start_date' => $validated['start_date'],
-                    'adults' => $validated['adults'],
-                    'children' => $validated['children'],
-                    'duration_days' => $package->duration,
-                ]
+                'quantity' => $totalPax, // Quantity is total participants
+                'price' => $pricePerPax, // Store the calculated price per pax
             ]);
 
-            // 4. Commit Transaksi
             DB::commit();
 
-            // 5. Kembalikan data Order (frontend akan pindah ke halaman pembayaran)
-            return response()->json($order, 201);
+            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Gagal membuat booking: ' . $e->getMessage()], 500);
+            Log::error('Holiday package booking failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json(['message' => 'Failed to create booking: ' . $e->getMessage()], 500);
         }
     }
 }

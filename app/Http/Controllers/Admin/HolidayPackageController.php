@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Arr;
 use Inertia\Inertia; // Import Inertia facade
+use Illuminate\Validation\ValidationException; // [Add this]
 
 class HolidayPackageController extends Controller
 {
@@ -84,11 +85,19 @@ public function store(Request $request)
         $validatedData = $request->validate([
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
-            'price_regular' => 'required|numeric|min:0',
-            'price_exclusive' => 'required|numeric|min:0',
-            'price_child' => 'nullable|numeric|min:0',
+            // [REMOVED] Old price fields
+            // 'price_regular' => 'required|numeric|min:0',
+            // 'price_exclusive' => 'required|numeric|min:0',
+            // 'price_child' => 'nullable|numeric|min:0',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
+            
+            // [NEW] Validation for price_tiers
+            'price_tiers' => 'required|array|min:1',
+            'price_tiers.*.min_pax' => 'required|integer|min:1',
+            'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
+            'price_tiers.*.price' => 'required|numeric|min:0',
+
             // --- Validate as arrays ---
             'itinerary' => 'nullable|array',
             'itinerary.*.day' => 'required_with:itinerary|integer|min:1',
@@ -115,17 +124,26 @@ public function store(Request $request)
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ], [
-            // Custom messages...
+            // [NEW] Custom messages for price_tiers
+            'price_tiers.required' => 'You must add at least one price tier.',
+            'price_tiers.min' => 'You must add at least one price tier.',
+            'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
+            'price_tiers.*.min_pax.integer' => 'Min Pax must be a number.',
+            'price_tiers.*.min_pax.min' => 'Min Pax must be at least 1.',
+            'price_tiers.*.max_pax.gte' => 'Max Pax must be greater than or equal to Min Pax.',
+            'price_tiers.*.price.required' => 'The Price field is required.',
+            'price_tiers.*.price.numeric' => 'The Price must be a number.',
         ]);
 
         DB::beginTransaction();
         try {
-            // 2. Prepare data for model creation (exclude images and specific translation keys)
+            // 2. Prepare data for model creation (exclude images)
              // We pass the validated arrays directly, relying on $casts
             $packageData = Arr::except($validatedData, ['images']);
 
             // 3. Create the HolidayPackage (Model $casts handle array->JSON storage)
-            // The create method correctly handles translatable attributes if they exist in $packageData
+            // The create method correctly handles translatable attributes
+            // The model accessor will handle the 'price_tiers' array
             $package = HolidayPackage::create($packageData);
 
             // 4. Handle Image Uploads
@@ -158,15 +176,23 @@ public function store(Request $request)
      */
     public function update(Request $request, HolidayPackage $holidayPackage)
     {
-        // 1. Validate request data (Keep array validation)
+        // 1. Validate request data
         $validatedData = $request->validate([
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
-            'price_regular' => 'required|numeric|min:0',
-            'price_exclusive' => 'required|numeric|min:0',
-            'price_child' => 'nullable|numeric|min:0',
+            // [REMOVED] Old price fields
+            // 'price_regular' => 'required|numeric|min:0',
+            // 'price_exclusive' => 'required|numeric|min:0',
+            // 'price_child' => 'nullable|numeric|min:0',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
+
+            // [NEW] Validation for price_tiers
+            'price_tiers' => 'required|array|min:1',
+            'price_tiers.*.min_pax' => 'required|integer|min:1',
+            'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
+            'price_tiers.*.price' => 'required|numeric|min:0',
+
              // --- Array Validation ---
             'itinerary' => 'nullable|array',
             'itinerary.*.day' => 'required_with:itinerary|integer|min:1',
@@ -195,7 +221,15 @@ public function store(Request $request)
             'delete_images' => 'nullable|array',
             'delete_images.*' => 'integer|exists:images,id'
         ], [
-             // Custom messages...
+             // [NEW] Custom messages for price_tiers
+            'price_tiers.required' => 'You must add at least one price tier.',
+            'price_tiers.min' => 'You must add at least one price tier.',
+            'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
+            'price_tiers.*.min_pax.integer' => 'Min Pax must be a number.',
+            'price_tiers.*.min_pax.min' => 'Min Pax must be at least 1.',
+            'price_tiers.*.max_pax.gte' => 'Max Pax must be greater than or equal to Min Pax.',
+            'price_tiers.*.price.required' => 'The Price field is required.',
+            'price_tiers.*.price.numeric' => 'The Price must be a number.',
         ]);
 
         \Log::info("Attempting to update HolidayPackage ID: " . $holidayPackage->id);
@@ -225,6 +259,7 @@ public function store(Request $request)
                      $packageData[$field] = null;
                  }
              }
+            // 'price_tiers' is now a required field, so it doesn't need to be in $arrayFields
 
             // 4. Update the main model attributes (including arrays)
             // Let $casts handle JSON conversion
@@ -291,7 +326,8 @@ public function store(Request $request)
         try {
             // Delete associated images first
             foreach ($holidayPackage->images as $image) {
-                Storage::disk('public')->delete($image->path);
+                // [FIX] Use $image->url
+                Storage::disk('public')->delete($image->url);
                 $image->delete();
             }
 

@@ -60,13 +60,22 @@ const StarRating = ({ rating }) => {
         <Star
           key={i}
           className={`h-4 w-4 ${i < filledStars
-              ? 'text-yellow-400 fill-yellow-400'
-              : 'text-gray-300'
+            ? 'text-yellow-400 fill-yellow-400'
+            : 'text-gray-300'
             }`}
         />
       ))}
     </div>
   );
+};
+
+// [NEW] Helper to get the starting price from tiers
+const getStartingPrice = (tiers) => {
+  // The model accessor sorts by min_pax, so the first one is the starting price.
+  if (tiers && Array.isArray(tiers) && tiers.length > 0) {
+    return tiers[0].price;
+  }
+  return null;
 };
 
 export default function HolidayPackageIndex({ auth, packages }) {
@@ -138,60 +147,64 @@ export default function HolidayPackageIndex({ auth, packages }) {
                 <TableHead>Package Name</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>Price (Exclusive)</TableHead>
+                <TableHead>Starting From</TableHead>
                 <TableHead>Rating</TableHead>
                 <TableHead><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {packages.data.length > 0 ? (
-                packages.data.map((pkg) => (
-                  <TableRow key={pkg.id}>
-                    <TableCell>
-                      <img
-                        // [FIXED] This URL is now correct
-                        src={pkg.thumbnail_url || 'https://placehold.co/100x75/eee/ccc?text=No+Image'}
-                        alt={pkg.name}
-                        className="h-12 w-16 object-cover rounded"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {pkg.name}
-                      {pkg.category && <Badge variant="outline" className="ml-2">{pkg.category}</Badge>}
-                    </TableCell>
-                    <TableCell>{pkg.location || 'N/A'}</TableCell>
-                    <TableCell>{pkg.duration} Days</TableCell>
-                    <TableCell>{formatCurrency(pkg.price_exclusive)}</TableCell>
-                    <TableCell>
-                      <StarRating rating={pkg.rating} />
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem asChild>
-                            <Link href={route('admin.packages.edit', pkg.id)} className="flex items-center cursor-pointer">
-                              <Edit className="mr-2 h-4 w-4" /> Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(pkg)}
-                            className="text-red-600 focus:text-red-700 focus:bg-red-50 flex items-center cursor-pointer"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
+                packages.data.map((pkg) => {
+                  const startingPrice = getStartingPrice(pkg.price_tiers);
+                  return (
+                    <TableRow key={pkg.id}>
+                      <TableCell>
+                        <img
+                          src={pkg.thumbnail_url || 'https://placehold.co/100x75/eee/ccc?text=No+Image'}
+                          alt={pkg.name}
+                          className="h-12 w-16 object-cover rounded"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {pkg.name}
+                        {pkg.category && <Badge variant="outline" className="ml-2">{pkg.category}</Badge>}
+                      </TableCell>
+                      <TableCell>{pkg.location || 'N/A'}</TableCell>
+                      <TableCell>{pkg.duration} Days</TableCell>
+                      <TableCell>
+                        {startingPrice !== null ? formatCurrency(startingPrice) : 'Not Set'}
+                      </TableCell>
+                      <TableCell>
+                        <StarRating rating={pkg.rating} />
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link href={route('admin.packages.edit', pkg.id)} className="flex items-center cursor-pointer">
+                                <Edit className="mr-2 h-4 w-4" /> Edit
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(pkg)}
+                              className="text-red-600 focus:text-red-700 focus:bg-red-50 flex items-center cursor-pointer"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan="7" className="h-24 text-center">
