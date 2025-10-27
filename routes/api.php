@@ -68,6 +68,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/packages/{packageId}/book', [BookingController::class, 'storeHolidayPackageBooking']);
     // --- Car Rentals ---
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
+    // --- Activity Booking ---
+    Route::post('/activities/{activity}/book', [BookingController::class, 'storeActivityBooking']); // <-- Add this
 
     // --- Orders & History ---
     Route::get('/my-orders', [OrderController::class, 'index']);

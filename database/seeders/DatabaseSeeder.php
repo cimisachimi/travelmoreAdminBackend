@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             CarRentalSeeder::class,
             HolidayPackageSeeder::class,
-            // Tambahkan seeder lain di sini jika perlu
+            ActivitySeeder::class, // <-- Add this
         ]);
     }
 }

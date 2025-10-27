@@ -2,49 +2,71 @@
 
 namespace Database\Seeders;
 
+use App\Models\Activity;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ActivitySeeder extends Seeder
 {
     public function run(): void
     {
-        // Truncate the table first
-        DB::table('activities')->truncate();
+        Schema::disableForeignKeyConstraints();
 
-        DB::table('activities')->insert([
-            [
-                'name' => 'Borobudur Sunrise Tour',
-                'description' => 'Witness a breathtaking sunrise over the world\'s largest Buddhist temple.',
-                'location' => 'Magelang, Central Java (near Yogyakarta)',
-                'price' => 35.00,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Prambanan Temple Exploration',
-                'description' => 'Explore the magnificent ancient Hindu temple complex, a UNESCO World Heritage site.',
-                'location' => 'Yogyakarta',
-                'price' => 25.00,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Jomblang Cave "Heaven\'s Light"',
-                'description' => 'Descend into a vertical cave to see a spectacular ray of light shining down.',
-                'location' => 'Gunung Kidul, Yogyakarta',
-                'price' => 70.00,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Merapi Volcano Jeep Tour',
-                'description' => 'An off-road adventure on the slopes of an active volcano, visiting villages affected by the last eruption.',
-                'location' => 'Sleman, Yogyakarta',
-                'price' => 30.00,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+        try {
+            // Clear previous data
+            DB::table('activity_translations')->truncate();
+            DB::table('activities')->truncate();
+            DB::table('images')->where('imageable_type', Activity::class)->delete();
+
+            // --- Activity 1: Snorkeling Adventure ---
+            $act1 = Activity::create([
+                'price' => 350000,
+                'status' => 'active',
+                'duration' => '3 Hours',
+            ]);
+
+            $act1->translations()->create([
+                'locale' => 'en',
+                'name' => 'Snorkeling Adventure',
+                'description' => 'Explore the vibrant coral reefs and marine life in a guided snorkeling tour.',
+                'location' => 'Blue Lagoon, Bali',
+                'category' => 'Water Sport',
+            ]);
+
+            $act1->translations()->create([
+                'locale' => 'id',
+                'name' => 'Petualangan Snorkeling',
+                'description' => 'Jelajahi terumbu karang yang indah dan kehidupan laut dalam tur snorkeling berpemandu.',
+                'location' => 'Blue Lagoon, Bali',
+                'category' => 'Olahraga Air',
+            ]);
+
+            // --- Activity 2: Ubud Cycling Tour ---
+            $act2 = Activity::create([
+                'price' => 450000,
+                'status' => 'active',
+                'duration' => 'Half Day',
+            ]);
+
+            $act2->translations()->create([
+                'locale' => 'en',
+                'name' => 'Ubud Cycling Tour',
+                'description' => 'Cycle through scenic rice paddies, traditional villages, and enjoy the nature of Ubud.',
+                'location' => 'Ubud, Bali',
+                'category' => 'Tour',
+            ]);
+
+            $act2->translations()->create([
+                'locale' => 'id',
+                'name' => 'Tur Sepeda Ubud',
+                'description' => 'Bersepeda melintasi sawah yang indah, desa-desa tradisional, dan nikmati alam Ubud.',
+                'location' => 'Ubud, Bali',
+                'category' => 'Tur',
+            ]);
+
+        } finally {
+            Schema::enableForeignKeyConstraints();
+        }
     }
 }

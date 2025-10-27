@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\CarRental;
 use App\Models\TripPlanner;
+use App\Models\Activity;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\CarRentalAvailability;
@@ -322,4 +323,74 @@ class BookingController extends Controller
             return response()->json(['message' => 'Failed to create booking: ' . $e->getMessage()], 500);
         }
     }
-}
+    public function storeActivityBooking(Request $request, Activity $activity)
+    {
+        $validated = $request->validate([
+            'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'quantity' => 'required|integer|min:1',
+            // Add other activity-specific fields like 'participants' if needed
+        ]);
+
+        if ($activity->status !== 'active') {
+            return response()->json(['message' => 'This activity is not available.'], 400);
+        }
+
+        $user = Auth::user();
+        $totalPrice = $activity->price * $validated['quantity'];
+        $downPayment = $totalPrice * 0.5; // 50% DP
+        $paymentDeadline = Carbon::now()->addHours(2);
+
+        try {
+            DB::beginTransaction();
+
+            // 1. Create Order
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
+                'total_amount' => $totalPrice,
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
+            ]);
+
+            // 2. Create OrderItem
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $activity->id,
+                'orderable_type' => Activity::class,
+                'quantity' => $validated['quantity'],
+                'price' => $activity->price,
+            ]);
+
+            // 3. Create Booking
+            $booking = $activity->bookings()->create([
+                'user_id' => $user->id,
+                'status' => 'pending',
+                'payment_status' => 'unpaid',
+                'total_price' => $totalPrice,
+                'booking_date' => $validated['booking_date'],
+                'start_date' => $validated['booking_date'], // Use booking_date for start_date
+                'details' => [
+                    'quantity' => $validated['quantity'],
+                    // Store other details if any
+                ],
+            ]);
+
+            // 4. Link Order to Booking
+            $order->booking_id = $booking->id;
+            $order->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Activity booked successfully. Please complete payment.',
+                'payment_deadline' => $paymentDeadline->toIso8601String(),
+                'order' => $order->load('orderItems.orderable', 'booking.bookable'),
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Activity booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Booking failed.'], 500);
+        }
+}}

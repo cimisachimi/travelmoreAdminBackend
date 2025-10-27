@@ -1,6 +1,16 @@
 import { Link } from '@inertiajs/react';
-// Add 'Shapes' to this import line
-import { Home, Package, Users, FileText, CreditCard, Shapes, ShoppingCart, User as UserIcon, Car, Activity } from 'lucide-react'; // Add ShoppingCart icon
+// Imports cleaned up to match usage
+import {
+  Home,
+  Package,
+  Users,
+  FileText,
+  CreditCard,
+  ShoppingCart,
+  User as UserIcon,
+  Car,
+  Activity // This is the icon you used
+} from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
 import {
