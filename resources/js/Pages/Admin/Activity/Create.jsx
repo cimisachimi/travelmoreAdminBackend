@@ -6,7 +6,6 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-  CardFooter,
 } from "@/Components/ui/card";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
@@ -36,7 +35,10 @@ export default function Create({ auth }) {
     price: 0,
     status: "active",
     duration: "",
-    images: [],
+
+    // Image fields
+    thumbnail: null,
+    gallery: [],
 
     // Translatable
     translations: {
@@ -55,43 +57,73 @@ export default function Create({ auth }) {
     },
   });
 
-  // --- Image States and Dropzone Logic ---
-  const [imagePreviews, setImagePreviews] = useState([]);
+  // --- Thumbnail States ---
+  const [thumbnailPreview, setThumbnailPreview] = useState(null);
 
-  const onDrop = (acceptedFiles) => {
+  const onThumbnailDrop = (acceptedFiles) => {
+    const file = acceptedFiles[0];
+    if (file) {
+      setThumbnailPreview(URL.createObjectURL(file));
+      setData("thumbnail", file);
+    }
+  };
+
+  const removeThumbnail = () => {
+    setThumbnailPreview(null);
+    setData("thumbnail", null);
+  };
+
+  const {
+    getRootProps: getThumbnailRootProps,
+    getInputProps: getThumbnailInputProps,
+    isDragActive: isThumbnailDragActive,
+  } = useDropzone({
+    onDrop: onThumbnailDrop,
+    accept: { "image/*": [".jpeg", ".jpg", ".png", ".webp"] },
+    multiple: false,
+  });
+  // --- End Thumbnail Logic ---
+
+  // --- Gallery States ---
+  const [galleryPreviews, setGalleryPreviews] = useState([]);
+
+  const onGalleryDrop = (acceptedFiles) => {
     const newFiles = acceptedFiles.map((file) =>
       Object.assign(file, {
         preview: URL.createObjectURL(file),
       })
     );
-    setImagePreviews((prev) => [...prev, ...newFiles]);
-    setData("images", [...data.images, ...newFiles]);
+    setGalleryPreviews((prev) => [...prev, ...newFiles]);
+    setData("gallery", [...data.gallery, ...newFiles]);
   };
 
-  const removeImage = (index) => {
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  const removeGalleryImage = (index) => {
+    setGalleryPreviews((prev) => prev.filter((_, i) => i !== index));
     setData(
-      "images",
-      data.images.filter((_, i) => i !== index)
+      "gallery",
+      data.gallery.filter((_, i) => i !== index)
     );
   };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+  const {
+    getRootProps: getGalleryRootProps,
+    getInputProps: getGalleryInputProps,
+    isDragActive: isGalleryDragActive,
+  } = useDropzone({
+    onDrop: onGalleryDrop,
     accept: { "image/*": [".jpeg", ".jpg", ".png", ".webp"] },
     multiple: true,
   });
-  // --- End Image Logic ---
+  // --- End Gallery Logic ---
 
   const submit = (e) => {
     e.preventDefault();
-    // Set 'Content-Type' to 'multipart/form-data'
+    // --- FIX: Remove forceFormData ---
     post(route("admin.activities.store"), {
-      forceFormData: true,
+      // forceFormData: true, // Not needed, useForm detects files
     });
   };
 
-  // Helper for updating nested translation state
   const handleTranslationChange = (locale, key, value) => {
     setData("translations", {
       ...data.translations,
@@ -142,8 +174,6 @@ export default function Create({ auth }) {
                         Indonesian
                       </TabsTrigger>
                     </TabsList>
-
-                    {/* English Tab */}
                     <TabsContent
                       value="en"
                       className="mt-4"
@@ -159,8 +189,6 @@ export default function Create({ auth }) {
                         />
                       </div>
                     </TabsContent>
-
-                    {/* Indonesian Tab */}
                     <TabsContent
                       value="id"
                       className="mt-4"
@@ -261,39 +289,94 @@ export default function Create({ auth }) {
                   </CardContent>
                 </Card>
 
-                {/* Image Upload Card */}
+                {/* Thumbnail Card */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Images</CardTitle>
+                    <CardTitle>Thumbnail</CardTitle>
                     <CardDescription>
-                      Upload images for the activity. The
-                      first image will be the thumbnail.
+                      Upload the main image for the
+                      activity.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div
-                      {...getRootProps()}
-                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${isDragActive
+                      {...getThumbnailRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${isThumbnailDragActive
                           ? "border-primary"
                           : "border-gray-300"
                         }`}
                     >
-                      <input {...getInputProps()} />
+                      <input
+                        {...getThumbnailInputProps()}
+                      />
                       <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
                       <p className="mt-2 text-sm text-gray-600">
-                        {isDragActive
-                          ? "Drop the files here..."
-                          : "Drag 'n' drop files here, or click to select"}
+                        {isThumbnailDragActive
+                          ? "Drop file here"
+                          : "Drag 'n' drop or click"}
                       </p>
                     </div>
                     <InputError
-                      message={errors.images}
+                      message={errors.thumbnail}
                       className="mt-2"
                     />
+                    {thumbnailPreview && (
+                      <div className="mt-4 relative w-full h-32">
+                        <img
+                          src={thumbnailPreview}
+                          alt="Thumbnail Preview"
+                          className="h-full w-full object-cover rounded-md"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6"
+                          onClick={removeThumbnail}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                    {/* Previews */}
+                {/* Gallery Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Gallery</CardTitle>
+                    <CardDescription>
+                      Upload additional images for the
+                      gallery.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      {...getGalleryRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${isGalleryDragActive
+                          ? "border-primary"
+                          : "border-gray-300"
+                        }`}
+                    >
+                      <input
+                        {...getGalleryInputProps()}
+                      />
+                      <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                      <p className="mt-2 text-sm text-gray-600">
+                        {isGalleryDragActive
+                          ? "Drop files here"
+                          : "Drag 'n' drop (multiple)"}
+                      </p>
+                    </div>
+                    <InputError
+                      message={
+                        errors.gallery ||
+                        errors["gallery.*"]
+                      }
+                      className="mt-2"
+                    />
                     <div className="mt-4 grid grid-cols-3 gap-4">
-                      {imagePreviews.map(
+                      {galleryPreviews.map(
                         (file, index) => (
                           <div
                             key={index}
@@ -310,7 +393,7 @@ export default function Create({ auth }) {
                               size="icon"
                               className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100"
                               onClick={() =>
-                                removeImage(
+                                removeGalleryImage(
                                   index
                                 )
                               }
@@ -341,7 +424,7 @@ export default function Create({ auth }) {
   );
 }
 
-// --- Reusable Translation Form Component ---
+// Reusable Translation Form Component
 function TranslationForm({ locale, data, errors, onChange }) {
   return (
     <>
@@ -362,7 +445,9 @@ function TranslationForm({ locale, data, errors, onChange }) {
         <Input
           id={`location_${locale}`}
           value={data.location}
-          onChange={(e) => onChange(locale, "location", e.target.value)}
+          onChange={(e) =>
+            onChange(locale, "location", e.target.value)
+          }
         />
         <InputError
           message={errors[`translations.${locale}.location`]}
@@ -374,7 +459,9 @@ function TranslationForm({ locale, data, errors, onChange }) {
         <Input
           id={`category_${locale}`}
           value={data.category}
-          onChange={(e) => onChange(locale, "category", e.target.value)}
+          onChange={(e) =>
+            onChange(locale, "category", e.target.value)
+          }
           placeholder="e.g. Water Sport, Hiking"
         />
         <InputError

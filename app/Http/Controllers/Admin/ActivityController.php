@@ -4,50 +4,37 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
-use App\Models\Image; // Added for image handling
+use App\Models\Image;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage; // Added for image handling
-use Illuminate\Support\Str; // Added for image handling
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ActivityController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        // Load the 'translations' relationship to display the correct name
         $activities = Activity::with('translations')->latest()->paginate(10);
-
         return Inertia::render('Admin/Activity/Index', [
             'activities' => $activities,
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         return Inertia::render('Admin/Activity/Create');
     }
 
-    /**
-     * Store a new resource in storage.
-     */
     public function store(Request $request)
     {
-        // Validation now includes translations
         $validated = $request->validate([
             'price' => 'required|numeric|min:0',
             'status' => 'required|string|in:active,inactive',
             'duration' => 'nullable|string|max:255',
-            'images' => 'nullable|array',
-            'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
-
-            // Translation validation
+            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'gallery' => 'nullable|array',
+            'gallery.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
             'translations' => 'required|array',
             'translations.en' => 'required|array',
             'translations.en.name' => 'required|string|max:255',
@@ -64,27 +51,22 @@ class ActivityController extends Controller
         try {
             DB::beginTransaction();
 
-            // Create the activity with non-translatable fields
             $activity = Activity::create([
                 'price' => $validated['price'],
                 'status' => $validated['status'],
                 'duration' => $validated['duration'],
-                'name' => $validated['translations']['en']['name'], // Use 'en' as fallback
+                'name' => $validated['translations']['en']['name'],
             ]);
 
-            // --- Image Handling ---
-            if ($request->hasFile('images')) {
-                $isFirstImage = true;
-                foreach ($request->file('images') as $imageFile) {
-                    // Set the first uploaded image as the thumbnail
-                    $type = $isFirstImage ? 'thumbnail' : 'gallery';
-                    $this->storeImage($imageFile, $activity, $type);
-                    $isFirstImage = false;
+            $this->storeImage($request->file('thumbnail'), $activity, 'thumbnail');
+
+            if ($request->hasFile('gallery')) {
+                foreach ($request->file('gallery') as $imageFile) {
+                    $this->storeImage($imageFile, $activity, 'gallery');
                 }
             }
 
-            // --- Translation Handling ---
-            $this->updateTranslations($activity, $request);
+            $this->updateTranslations($activity, $validated['translations']);
 
             DB::commit();
 
@@ -95,56 +77,45 @@ class ActivityController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Activity $activity)
     {
-        // Typically not used in admin panels, redirect to edit
         return redirect()->route('admin.activities.edit', $activity->id);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Activity $activity)
     {
-        // Load both images and translations
         $activity->load('images', 'translations');
 
-        // Prepare translations data for the form
         $translations = $activity->translations->keyBy('locale')->toArray();
         $activityData = $activity->toArray();
-        // Ensure both 'en' and 'id' keys exist to avoid errors in the form
+
+        // Separate thumbnail and gallery for the form
+        $allImages = $activity->images;
+        $activityData['thumbnail'] = $allImages->firstWhere('type', 'thumbnail');
+        $activityData['gallery'] = $allImages->where('type', 'gallery')->values()->all();
+
         $activityData['translations'] = [
             'en' => $translations['en'] ?? (object)[],
             'id' => $translations['id'] ?? (object)[],
         ];
 
+        unset($activityData['images']);
+
         return Inertia::render('Admin/Activity/Edit', [
-            'activity' => $activityData, // Pass the formatted data
+            'activity' => $activityData,
         ]);
     }
 
     /**
-     * Update the specified resource in storage.
+     * Update the specified resource's TEXT fields in storage.
      */
     public function update(Request $request, Activity $activity)
     {
+        // --- THIS FORM NO LONGER ACCEPTS FILES ---
         $validated = $request->validate([
-            // Non-translatable fields
             'price' => 'required|numeric|min:0',
             'status' => 'required|string|in:active,inactive',
             'duration' => 'nullable|string|max:255',
-            
-            // Image fields
-            'images' => 'nullable|array',
-            'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
-            'deleted_images' => 'nullable|array',
-            'deleted_images.*' => 'integer|exists:images,id',
-            'thumbnail_id' => 'nullable|integer|exists:images,id',
-
-            // Translation validation
             'translations' => 'required|array',
             'translations.en' => 'required|array',
             'translations.en.name' => 'required|string|max:255',
@@ -161,39 +132,14 @@ class ActivityController extends Controller
         try {
             DB::beginTransaction();
 
-            // Update non-translatable fields
             $activity->update([
                 'price' => $validated['price'],
                 'status' => $validated['status'],
                 'duration' => $validated['duration'],
-                'name' => $validated['translations']['en']['name'], // Update fallback name
+                'name' => $validated['translations']['en']['name'],
             ]);
 
-            // --- Image Handling ---
-
-            // 1. Delete images marked for deletion
-            if ($request->has('deleted_images')) {
-                foreach ($request->deleted_images as $imageId) {
-                    $this->destroyImage($imageId);
-                }
-            }
-
-            // 2. Upload new images
-            if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $imageFile) {
-                    $this->storeImage($imageFile, $activity, 'gallery');
-                }
-            }
-
-            // 3. Update thumbnail
-            if ($request->has('thumbnail_id')) {
-                $this->updateThumbnail($activity, $request->thumbnail_id);
-            }
-            // --- End Image Handling ---
-
-
-            // --- Translation Handling ---
-            $this->updateTranslations($activity, $request);
+            $this->updateTranslations($activity, $validated['translations']);
 
             DB::commit();
 
@@ -211,20 +157,12 @@ class ActivityController extends Controller
     {
         try {
             DB::beginTransaction();
-
-            // --- Image Deletion ---
-            // Eager load images to ensure we have them before deleting the activity
             $activity->load('images');
             foreach ($activity->images as $image) {
-                Storage::disk('public')->delete($image->path);
-                $image->delete(); // Delete the image record
+                $this->destroyImage($activity, $image);
             }
-            // --- End Image Deletion ---
-
-            $activity->delete(); // This will also delete translations due to cascade delete
-
+            $activity->delete();
             DB::commit();
-
             return redirect()->route('admin.activities.index')->with('success', 'Activity deleted successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
@@ -232,71 +170,103 @@ class ActivityController extends Controller
         }
     }
 
-
-    // --- Image Helper Methods ---
-
-    /**
-     * Store a new image.
-     */
-    protected function storeImage($imageFile, Activity $activity, $type = 'gallery')
-    {
-        $fileName = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
-        $path = $imageFile->storeAs('activities', $fileName, 'public');
-
-        $activity->images()->create([
-            'path' => $path,
-            'type' => $type,
-        ]);
-    }
-
-    /**
-     * Delete an image from storage and database.
-     */
-    protected function destroyImage($imageId)
-    {
-        $image = Image::find($imageId);
-        if ($image) {
-            Storage::disk('public')->delete($image->path);
-            $image->delete();
-        }
-    }
+    // --- NEW IMAGE HANDLING METHODS ---
 
     /**
      * Update the thumbnail for the activity.
      */
-    protected function updateThumbnail(Activity $activity, $thumbnailId)
+    public function updateThumbnail(Request $request, Activity $activity)
     {
-        // Reset old thumbnail
-        $activity->images()->where('type', 'thumbnail')->update(['type' => 'gallery']);
+        $request->validate([
+            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
 
-        // Set new thumbnail
-        $newThumbnail = Image::find($thumbnailId);
-        // Check if the image belongs to this activity before updating
-        if ($newThumbnail && $newThumbnail->imageable_id === $activity->id) {
-            $newThumbnail->type = 'thumbnail';
-            $newThumbnail->save();
+        DB::beginTransaction();
+        try {
+            // Delete old thumbnail
+            $oldThumbnail = $activity->images()->where('type', 'thumbnail')->first();
+            if ($oldThumbnail) {
+                Storage::disk('public')->delete($oldThumbnail->path);
+                $oldThumbnail->delete();
+            }
+            
+            // Store new one
+            $this->storeImage($request->file('thumbnail'), $activity, 'thumbnail');
+
+            DB::commit();
+            return back()->with('success', 'Thumbnail updated.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to update thumbnail: ' . $e->getMessage()]);
         }
     }
 
-
-    // --- Translation Helper Methods ---
-    
     /**
-     * Update or create translations for the activity.
+     * Store new gallery images for the activity.
      */
-    protected function updateTranslations(Activity $activity, Request $request)
+    public function storeGallery(Request $request, Activity $activity)
     {
-        if ($request->has('translations')) {
-            foreach ($request->translations as $locale => $data) {
-                // Use translateOrNew to either update existing or create new translation
-                $activity->translateOrNew($locale)->fill([
-                    'name' => $data['name'] ?? '',
-                    'description' => $data['description'] ?? null,
-                    'location' => $data['location'] ?? '',
-                    'category' => $data['category'] ?? null,
-                ]);
+        $request->validate([
+            'gallery' => 'required|array',
+            'gallery.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            if ($request->hasFile('gallery')) {
+                foreach ($request->file('gallery') as $imageFile) {
+                    $this->storeImage($imageFile, $activity, 'gallery');
+                }
             }
-            $activity->save(); // Save the translations
+            DB::commit();
+            return back()->with('success', 'Gallery images added.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to add images: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Delete a specific image.
+     */
+    public function destroyImage(Activity $activity, Image $image)
+    {
+        // Check if image belongs to activity
+        if ($image->imageable_id !== $activity->id) {
+            return back()->withErrors(['error' => 'Image mismatch.']);
+        }
+        
+        // Prevent deleting the last thumbnail (unless activity is being deleted)
+        if ($image->type === 'thumbnail' && $activity->images()->where('type', 'thumbnail')->count() <= 1) {
+             return back()->withErrors(['error' => 'Cannot delete the only thumbnail. Upload a new one first.']);
+        }
+
+        Storage::disk('public')->delete($image->path);
+        $image->delete();
+
+        return back()->with('success', 'Image deleted.');
+    }
+
+
+    // --- Helper Methods ---
+
+    protected function storeImage($imageFile, Activity $activity, $type = 'gallery')
+    {
+        $fileName = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
+        $path = $imageFile->storeAs("activities/{$type}", $fileName, 'public');
+        $activity->images()->create(['path' => $path, 'type' => $type]);
+    }
+
+    protected function updateTranslations(Activity $activity, array $translationsData)
+    {
+        foreach ($translationsData as $locale => $data) {
+            $activity->translateOrNew($locale)->fill([
+                'name' => $data['name'] ?? '',
+                'description' => $data['description'] ?? null,
+                'location' => $data['location'] ?? '',
+                'category' => $data['category'] ?? null,
+            ]);
+        }
+        $activity->save();
     }
 }

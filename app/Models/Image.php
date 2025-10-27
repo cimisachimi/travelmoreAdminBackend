@@ -4,14 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage; // <-- Import Storage
+use Illuminate\Support\Facades\Storage; // <-- Import Storage needed
 
 class Image extends Model
 {
     use HasFactory;
 
-    // Use 'url' here as it's your actual column name
-    protected $fillable = ['url', 'type', 'imageable_id', 'imageable_type'];
+    // --- FIX 3: Use 'path' (or your actual column name) in fillable ---
+    protected $fillable = ['path', 'type', 'imageable_id', 'imageable_type'];
 
     // Define the relationship
     public function imageable()
@@ -19,17 +19,18 @@ class Image extends Model
         return $this->morphTo();
     }
 
-    // ✅ Add this accessor if it doesn't exist
-    // It creates a virtual 'full_url' attribute
-    public function getFullUrlAttribute(): string | null
+    // --- FIX 1: Rename this accessor to getUrlAttribute ---
+    // It creates a virtual 'url' attribute
+    public function getUrlAttribute(): string | null
     {
-        // Use the 'url' column which stores the path
-        if ($this->url) {
-            return Storage::disk('public')->url($this->url);
+        // Use the 'path' column (or your actual column name)
+        if ($this->path) {
+             // Ensure you're using the 'public' disk if that's where files are stored
+            return Storage::disk('public')->url($this->path);
         }
         return null;
     }
 
-    // ✅ Ensure 'full_url' is appended to JSON/Array output
-    protected $appends = ['full_url'];
+    // --- FIX 2: Ensure 'url' is appended ---
+    protected $appends = ['url'];
 }
