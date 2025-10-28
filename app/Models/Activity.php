@@ -18,7 +18,7 @@ class Activity extends Model implements TranslatableContract
      * @var array<int, string>
      */
     protected $fillable = [
-        'name',     // <-- This is the field causing the error
+        // 'name',  // <-- REMOVE THIS
         'price',
         'status',
         'duration',
@@ -73,14 +73,14 @@ class Activity extends Model implements TranslatableContract
     public function getThumbnailUrlAttribute()
     {
         $thumbnail = $this->images->firstWhere('type', 'thumbnail');
-        if ($thumbnail) {
-            return Storage::disk('public')->url($thumbnail->path);
-        }
-
-        $firstImage = $this->images->first();
-        if ($firstImage) {
-            return Storage::disk('public')->url($firstImage->path);
-        }
+        // AFTER
+if ($thumbnail) {
+    return Storage::disk('public')->url($thumbnail->url); // <-- To this
+}
+$firstImage = $this->images->first();
+if ($firstImage) {
+    return Storage::disk('public')->url($firstImage->url); // <-- And this
+}
 
         return null;
     }
@@ -90,7 +90,7 @@ class Activity extends Model implements TranslatableContract
         return $this->images->map(function ($image) {
             return [
                 'id' => $image->id,
-                'url' => Storage::disk('public')->url($image->path),
+                'url' => Storage::disk('public')->url($image->url), // <-- To this
                 'type' => $image->type,
             ];
         });

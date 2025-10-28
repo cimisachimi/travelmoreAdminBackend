@@ -55,7 +55,7 @@ class ActivityController extends Controller
                 'price' => $validated['price'],
                 'status' => $validated['status'],
                 'duration' => $validated['duration'],
-                'name' => $validated['translations']['en']['name'],
+                //'name' => $validated['translations']['en']['name'],
             ]);
 
             $this->storeImage($request->file('thumbnail'), $activity, 'thumbnail');
@@ -136,7 +136,7 @@ class ActivityController extends Controller
                 'price' => $validated['price'],
                 'status' => $validated['status'],
                 'duration' => $validated['duration'],
-                'name' => $validated['translations']['en']['name'],
+                //'name' => $validated['translations']['en']['name'],
             ]);
 
             $this->updateTranslations($activity, $validated['translations']);
@@ -186,10 +186,10 @@ class ActivityController extends Controller
             // Delete old thumbnail
             $oldThumbnail = $activity->images()->where('type', 'thumbnail')->first();
             if ($oldThumbnail) {
-                Storage::disk('public')->delete($oldThumbnail->path);
+                Storage::disk('public')->delete($oldThumbnail->url);
                 $oldThumbnail->delete();
             }
-            
+
             // Store new one
             $this->storeImage($request->file('thumbnail'), $activity, 'thumbnail');
 
@@ -235,13 +235,13 @@ class ActivityController extends Controller
         if ($image->imageable_id !== $activity->id) {
             return back()->withErrors(['error' => 'Image mismatch.']);
         }
-        
+
         // Prevent deleting the last thumbnail (unless activity is being deleted)
         if ($image->type === 'thumbnail' && $activity->images()->where('type', 'thumbnail')->count() <= 1) {
              return back()->withErrors(['error' => 'Cannot delete the only thumbnail. Upload a new one first.']);
         }
 
-        Storage::disk('public')->delete($image->path);
+        Storage::disk('public')->delete($image->url);
         $image->delete();
 
         return back()->with('success', 'Image deleted.');
@@ -254,7 +254,7 @@ class ActivityController extends Controller
     {
         $fileName = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
         $path = $imageFile->storeAs("activities/{$type}", $fileName, 'public');
-        $activity->images()->create(['path' => $path, 'type' => $type]);
+        $activity->images()->create(['url' => $path, 'type' => $type]);
     }
 
     protected function updateTranslations(Activity $activity, array $translationsData)
