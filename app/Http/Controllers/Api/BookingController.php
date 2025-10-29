@@ -117,7 +117,7 @@ class BookingController extends Controller
         }
         // --- END DATABASE TRANSACTION ---
     }
-    
+
     /**
      * Display a listing of the user's bookings.
      */
@@ -170,13 +170,13 @@ class BookingController extends Controller
     public function storeTripPlannerBooking(Request $request)
     {
         $user = Auth::user();
-        
+
         // 1. Find the planner associated with this user.
         $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
 
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
         $totalPrice = $tripPlanner->price; // Get price from the planner
-        
+
         // 2. Set payment details
         $downPayment = $totalPrice * 0.5; // 50% DP
         $paymentDeadline = Carbon::now()->addHours(2); // 2-hour deadline
@@ -272,7 +272,7 @@ class BookingController extends Controller
         }
 
         $totalPrice = $pricePerPax * $totalPax;
-        $downPayment = $totalPrice * 0.5; 
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
@@ -322,6 +322,63 @@ class BookingController extends Controller
             Log::error('Holiday package booking failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             return response()->json(['message' => 'Failed to create booking: ' . $e->getMessage()], 500);
         }
+    }
+    public function bookActivity(Request $request, Activity $activity)
+    {
+        $validated = $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'adults' => 'required|integer|min:1',
+            'children' => 'required|integer|min:0',
+        ]);
+
+        $user = Auth::user();
+        $totalPax = $validated['adults'] + $validated['children'];
+
+        // Get price directly from the activity model
+        $pricePerPax = $activity->price_per_pax;
+
+        if ($totalPax <= 0) {
+            return response()->json(['message' => 'Total participants must be at least 1.'], 400);
+        }
+
+        if ($pricePerPax <= 0) {
+            return response()->json(['message' => 'This activity cannot be booked as its price is not set.'], 400);
+        }
+
+        // Calculate total price
+        $totalPrice = $pricePerPax * $totalPax;
+
+        // Create the Order
+        $order = new Order([
+            'user_id' => $user->id,
+            'booking_id' => 'TM-' . Str::upper(Str::random(8)),
+            'total_price' => $totalPrice,
+            'status' => 'pending', // Default status
+            'payment_status' => 'pending',
+            'booking_details' => json_encode([
+                'start_date' => $validated['start_date'],
+                'adults' => $validated['adults'],
+                'children' => $validated['children'],
+            ]),
+        ]);
+
+        $order->save();
+
+        // Create the Order Item
+        $orderItem = new OrderItem([
+            'order_id' => $order->id,
+            'orderable_id' => $activity->id,
+            'orderable_type' => Activity::class,
+            'name' => $activity->translateOrDefault(app()->getLocale())->name ?? $activity->getTranslation('en', true)->name,
+            'quantity' => $totalPax,
+            'price' => $pricePerPax,
+            'subtotal' => $totalPrice,
+        ]);
+
+        $order->items()->save($orderItem);
+
+        // Return the created order (or just a success response)
+        return response()->json($order->load('items'), 201);
     }
     public function storeActivityBooking(Request $request, Activity $activity)
     {

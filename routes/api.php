@@ -39,7 +39,6 @@ Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalContr
 
 Route::get('/activities', [PublicActivityController::class, 'index']);
 Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
-
 // --- Webhooks ---
 // ✅ FIXED: Added the implicit /api prefix to match Ngrok/CSRF setup
 // This route should NOT have auth middleware.
