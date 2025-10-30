@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Models\HolidayPackage;
+use App\Models\DiscountCode; // ✅ ADD THIS
+use Illuminate\Validation\ValidationException; // ✅ ADD THIS
+
 
 class BookingController extends Controller
 {
@@ -252,6 +255,7 @@ class BookingController extends Controller
             'start_date' => 'required|date|after_or_equal:today',
             'adults' => 'required|integer|min:1',
             'children' => 'sometimes|integer|min:0',
+            'discount_code' => 'nullable|string|exists:discount_codes,code' // ✅ ADD THIS
         ]);
 
         $user = Auth::user();
@@ -261,18 +265,36 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        // --- [CORRECT] Get Price Per Pax using the model method ---
         $pricePerPax = $package->getPricePerPax($totalPax);
 
-        // --- [CORRECT] Check if a price was found ---
         if ($pricePerPax === null) {
             return response()->json([
                 'message' => 'Pricing is not available for the selected number of participants.'
             ], 400);
         }
 
-        $totalPrice = $pricePerPax * $totalPax;
-        $downPayment = $totalPrice * 0.5;
+        $subtotal = $pricePerPax * $totalPax; // This is the original price
+        $discountAmount = 0;
+        $discountCodeId = null;
+
+        // ✅ --- START DISCOUNT LOGIC ---
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+
+            if (!$discountCode || !$discountCode->isValid()) {
+                // This will stop execution and send a 422 response
+                throw ValidationException::withMessages([
+                    'discount_code' => 'This discount code is invalid or has expired.',
+                ]);
+            }
+
+            $discountAmount = $discountCode->calculateDiscount($subtotal);
+            $discountCodeId = $discountCode->id;
+        }
+        // ✅ --- END DISCOUNT LOGIC ---
+
+        $totalPrice = $subtotal - $discountAmount; // This is the final, discounted price
+        $downPayment = $totalPrice * 0.5; // DP is 50% of the *discounted* price
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
@@ -280,10 +302,13 @@ class BookingController extends Controller
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
-                'total_amount' => $totalPrice,
+                'subtotal' => $subtotal,               // ✅ ADD THIS
+                'discount_amount' => $discountAmount,     // ✅ ADD THIS
+                'total_amount' => $totalPrice,        // ✅ This is now the discounted total
+                'discount_code_id' => $discountCodeId,  // ✅ ADD THIS
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,
+                'down_payment_amount' => $downPayment,      // ✅ This is now the discounted DP
             ]);
 
             $booking = $package->bookings()->create([
@@ -292,13 +317,15 @@ class BookingController extends Controller
                 'start_date' => $validated['start_date'],
                 'end_date' => Carbon::parse($validated['start_date'])->addDays($package->duration - 1)->toDateString(),
                 'status' => 'pending',
-                'total_price' => $totalPrice,
+                'total_price' => $totalPrice, // ✅ Store the discounted total
                 'payment_status' => 'unpaid',
                 'details' => [
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
-                    'price_per_pax' => $pricePerPax, // Store the calculated price
+                    'price_per_pax' => $pricePerPax,
+                    'original_subtotal' => $subtotal, // ✅ Good to store for records
+                    'discount_applied' => $discountAmount // ✅ Good to store for records
                 ]
             ]);
 
@@ -309,9 +336,14 @@ class BookingController extends Controller
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
                 'orderable_type' => HolidayPackage::class,
-                'quantity' => $totalPax, // Quantity is total participants
-                'price' => $pricePerPax, // Store the calculated price per pax
+                'quantity' => $totalPax,
+                'price' => $pricePerPax,
             ]);
+
+            // ✅ Increment the discount code usage
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
 
             DB::commit();
 

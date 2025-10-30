@@ -12,6 +12,8 @@ use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\CarRentalController as AdminCarRentalController;
 use App\Http\Controllers\Admin\ActivityController; // Make sure this is imported
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeController; // ✅ ADD THIS IMPORT
+use App\Http\Controllers\Admin\PostController as AdminPostController; // ✅ ADD THIS
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -80,6 +82,10 @@ Route::middleware('auth')->group(function () {
              ->name('rentals.thumbnail.update'); // Becomes admin.rentals.thumbnail.update
         Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals'); // Use 'rentals' base name -> admin.rentals.index etc.
 
+
+        Route::resource('discount-codes', AdminDiscountCodeController::class)->names('discount-codes');
+
+        Route::resource('posts', AdminPostController::class)->names('posts');
     });
 });
 

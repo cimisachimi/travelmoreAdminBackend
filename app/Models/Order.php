@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo; // ✅ ADD THIS
 
 class Order extends Model
 {
@@ -13,31 +14,48 @@ class Order extends Model
     protected $fillable = [
         'user_id',
         'booking_id',
+        'discount_code_id', // ✅ ADD THIS
         'order_number',
+        'subtotal', // ✅ ADD THIS
+        'discount_amount', // ✅ ADD THIS
         'total_amount',
-        'down_payment_amount', // ✅ ADD THIS
+        'down_payment_amount',
         'status',
-        'payment_deadline', // ✅ ADD THIS
+        'payment_deadline',
     ];
 
     protected $casts = [
-        'payment_deadline' => 'datetime', // ✅ ADD THIS
+        'payment_deadline' => 'datetime',
     ];
+
     /**
      * An Order belongs to a User.
      */
-    public function user()
+    public function user(): BelongsTo // ✅ Type-hint
     {
         return $this->belongsTo(User::class);
     }
-    public function transactions()
+
+    /**
+     * An Order has many Transactions.
+     */
+    public function transactions() // ✅ Plural
     {
         return $this->hasMany(Transaction::class);
     }
+
+    /**
+     * Get the single successful transaction (if one exists).
+     */
+    public function transaction(): \Illuminate\Database\Eloquent\Relations\HasOne // ✅ Type-hint
+    {
+        return $this->hasOne(Transaction::class)->where('status', 'settlement');
+    }
+
     /**
      * An Order has one associated Booking.
      */
-    public function booking()
+    public function booking(): BelongsTo // ✅ Type-hint
     {
         return $this->belongsTo(Booking::class);
     }
@@ -45,25 +63,17 @@ class Order extends Model
     /**
      * An Order has many OrderItems.
      */
-    public function orderItems()
+    public function orderItems() // ✅ Plural
     {
         return $this->hasMany(OrderItem::class);
-    }
-
-    /**
-     * An Order has one Transaction.
-     */
-    public function transaction()
-    {
-        return $this->hasOne(Transaction::class);
     }
 
     // ✅ --- ADD THIS ENTIRE FUNCTION ---
     /**
-     * Get the items for the order.
+     * Get the discount code applied to this order.
      */
-    public function items()
+    public function discountCode(): BelongsTo
     {
-        return $this->hasMany(OrderItem::class);
+        return $this->belongsTo(DiscountCode::class);
     }
 }

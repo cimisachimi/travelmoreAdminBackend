@@ -13,7 +13,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
-
+use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -44,7 +44,9 @@ Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 // This route should NOT have auth middleware.
 Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
 
-
+// ✅ ADD THESE TWO NEW ROUTES FOR THE BLOG
+    Route::get('/public/posts', [PublicPostController::class, 'index']);
+    Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
 /*
 |--------------------------------------------------------------------------
 | Authenticated Client API Routes
