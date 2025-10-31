@@ -172,16 +172,44 @@ class BookingController extends Controller
      */
     public function storeTripPlannerBooking(Request $request)
     {
+        // [NEW] Add validation for discount code
+        $validated = $request->validate([
+            'discount_code' => 'nullable|string|exists:discount_codes,code'
+        ]);
+
         $user = Auth::user();
 
         // 1. Find the planner associated with this user.
         $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
 
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
-        $totalPrice = $tripPlanner->price; // Get price from the planner
+        $subtotal = $tripPlanner->price; // Get price from the planner (original price)
+
+        // [NEW] Initialize discount variables
+        $discountAmount = 0;
+        $discountCodeId = null;
+        $discountCode = null;
+
+        // [NEW] --- START DISCOUNT LOGIC ---
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+
+            if (!$discountCode || !$discountCode->isValid()) {
+                throw ValidationException::withMessages([
+                    'discount_code' => 'This discount code is invalid or has expired.',
+                ]);
+            }
+
+            $discountAmount = $discountCode->calculateDiscount($subtotal);
+            $discountCodeId = $discountCode->id;
+        }
+        // [NEW] --- END DISCOUNT LOGIC ---
+
+        $totalPrice = $subtotal - $discountAmount; // [NEW] Final price
 
         // 2. Set payment details
-        $downPayment = $totalPrice * 0.5; // 50% DP
+        // [FIX] Base DP on subtotal, consistent with package booking
+        $downPayment = $subtotal * 0.5; // 50% DP of original price
         $paymentDeadline = Carbon::now()->addHours(2); // 2-hour deadline
 
         // --- START DATABASE TRANSACTION ---
@@ -192,10 +220,13 @@ class BookingController extends Controller
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PLAN-' . strtoupper(Str::random(6)) . time(),
-                'total_amount' => $totalPrice,
-                'status' => 'pending', // Initial status
-                'payment_deadline' => $paymentDeadline, // Store deadline
-                'down_payment_amount' => $downPayment, // Store 50% DP amount
+                'subtotal' => $subtotal,               // [NEW]
+                'discount_amount' => $discountAmount,    // [NEW]
+                'total_amount' => $totalPrice,         // [MODIFIED] Use final price
+                'discount_code_id' => $discountCodeId,   // [NEW]
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment, // [MODIFIED] Based on subtotal
             ]);
 
             // 4. Create the Booking
@@ -203,7 +234,7 @@ class BookingController extends Controller
                 'user_id' => $user->id,
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
-                'total_price' => $totalPrice,
+                'total_price' => $totalPrice, // [MODIFIED] Use final price
                 'booking_date' => $tripDate,
                 'start_date' => $tripDate,
                 'end_date' => null, // Planners might not have an end date
@@ -212,6 +243,8 @@ class BookingController extends Controller
                     'email' => $tripPlanner->email,
                     'trip_type' => $tripPlanner->trip_type,
                     'travel_type' => $tripPlanner->travel_type,
+                    'original_subtotal' => $subtotal,     // [NEW]
+                    'discount_applied' => $discountAmount  // [NEW]
                 ]
             ]);
 
@@ -225,8 +258,13 @@ class BookingController extends Controller
                 'orderable_id' => $tripPlanner->id,
                 'orderable_type' => TripPlanner::class,
                 'quantity' => 1,
-                'price' => $totalPrice,
+                'price' => $subtotal, // Store the original price per item
             ]);
+
+            // [NEW] Increment the discount code usage
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
 
             DB::commit();
 
@@ -298,7 +336,7 @@ class BookingController extends Controller
 
         $totalPrice = $subtotal - $discountAmount; // This is the final, discounted price
 
-        // [FIX from previous step] Calculate Down Payment based on original $subtotal
+        // [FIX] Calculate Down Payment based on original $subtotal
         $downPayment = $subtotal * 0.5; // DP is 50% of the *original* price
 
         $paymentDeadline = now()->addHours(2);
@@ -346,7 +384,7 @@ class BookingController extends Controller
                 'price' => $pricePerPax,
             ]);
 
-            // This check is now safe because $discountCode is guaranteed to be either null or an object
+            // This check is now safe
             if ($discountCode) {
                 $discountCode->increment('uses');
             }
@@ -488,4 +526,5 @@ class BookingController extends Controller
             Log::error('Activity booking failed: ' . $e->getMessage());
             return response()->json(['message' => 'Booking failed.'], 500);
         }
-}}
+    }
+}
