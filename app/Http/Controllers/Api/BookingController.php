@@ -294,7 +294,10 @@ class BookingController extends Controller
         // ✅ --- END DISCOUNT LOGIC ---
 
         $totalPrice = $subtotal - $discountAmount; // This is the final, discounted price
-        $downPayment = $totalPrice * 0.5; // DP is 50% of the *discounted* price
+
+        // [FIX] Calculate Down Payment based on original $subtotal, not the discounted $totalPrice
+        $downPayment = $subtotal * 0.5; // DP is 50% of the *original* price
+
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
@@ -308,7 +311,7 @@ class BookingController extends Controller
                 'discount_code_id' => $discountCodeId,  // ✅ ADD THIS
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,      // ✅ This is now the discounted DP
+                'down_payment_amount' => $downPayment,      // ✅ This is now 50% of subtotal
             ]);
 
             $booking = $package->bookings()->create([
