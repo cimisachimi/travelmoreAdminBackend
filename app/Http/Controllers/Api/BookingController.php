@@ -255,7 +255,7 @@ class BookingController extends Controller
             'start_date' => 'required|date|after_or_equal:today',
             'adults' => 'required|integer|min:1',
             'children' => 'sometimes|integer|min:0',
-            'discount_code' => 'nullable|string|exists:discount_codes,code' // ✅ ADD THIS
+            'discount_code' => 'nullable|string|exists:discount_codes,code'
         ]);
 
         $user = Auth::user();
@@ -277,7 +277,10 @@ class BookingController extends Controller
         $discountAmount = 0;
         $discountCodeId = null;
 
-        // ✅ --- START DISCOUNT LOGIC ---
+        // [FIX] Initialize $discountCode to null
+        $discountCode = null;
+
+        // --- START DISCOUNT LOGIC ---
         if (!empty($validated['discount_code'])) {
             $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
 
@@ -291,11 +294,11 @@ class BookingController extends Controller
             $discountAmount = $discountCode->calculateDiscount($subtotal);
             $discountCodeId = $discountCode->id;
         }
-        // ✅ --- END DISCOUNT LOGIC ---
+        // --- END DISCOUNT LOGIC ---
 
         $totalPrice = $subtotal - $discountAmount; // This is the final, discounted price
 
-        // [FIX] Calculate Down Payment based on original $subtotal, not the discounted $totalPrice
+        // [FIX from previous step] Calculate Down Payment based on original $subtotal
         $downPayment = $subtotal * 0.5; // DP is 50% of the *original* price
 
         $paymentDeadline = now()->addHours(2);
@@ -305,13 +308,13 @@ class BookingController extends Controller
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $subtotal,               // ✅ ADD THIS
-                'discount_amount' => $discountAmount,     // ✅ ADD THIS
-                'total_amount' => $totalPrice,        // ✅ This is now the discounted total
-                'discount_code_id' => $discountCodeId,  // ✅ ADD THIS
+                'subtotal' => $subtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,      // ✅ This is now 50% of subtotal
+                'down_payment_amount' => $downPayment, // This is 50% of subtotal
             ]);
 
             $booking = $package->bookings()->create([
@@ -320,15 +323,15 @@ class BookingController extends Controller
                 'start_date' => $validated['start_date'],
                 'end_date' => Carbon::parse($validated['start_date'])->addDays($package->duration - 1)->toDateString(),
                 'status' => 'pending',
-                'total_price' => $totalPrice, // ✅ Store the discounted total
+                'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
                     'price_per_pax' => $pricePerPax,
-                    'original_subtotal' => $subtotal, // ✅ Good to store for records
-                    'discount_applied' => $discountAmount // ✅ Good to store for records
+                    'original_subtotal' => $subtotal,
+                    'discount_applied' => $discountAmount
                 ]
             ]);
 
@@ -343,7 +346,7 @@ class BookingController extends Controller
                 'price' => $pricePerPax,
             ]);
 
-            // ✅ Increment the discount code usage
+            // This check is now safe because $discountCode is guaranteed to be either null or an object
             if ($discountCode) {
                 $discountCode->increment('uses');
             }
