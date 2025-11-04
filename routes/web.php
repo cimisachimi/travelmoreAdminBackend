@@ -8,12 +8,12 @@ use App\Http\Controllers\Admin\HolidayPackageController as AdminHolidayPackageCo
 use App\Http\Controllers\Admin\TripPlannerController as AdminTripPlannerController;
 use App\Http\Controllers\Admin\TransactionController as AdminTransactionController;
 use App\Http\Controllers\Admin\ServiceController as AdminServiceController;
-use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController; // This is your alias
 use App\Http\Controllers\Admin\CarRentalController as AdminCarRentalController;
 use App\Http\Controllers\Admin\ActivityController; // Make sure this is imported
 use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeController; // ✅ ADD THIS IMPORT
-use App\Http\Controllers\Admin\PostController as AdminPostController; // ✅ ADD THIS
+use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeController;
+use App\Http\Controllers\Admin\PostController as AdminPostController;
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -65,7 +65,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index'); // Becomes admin.planners.index
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('transactions.index'); // Becomes admin.transactions.index
         Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index'); // Becomes admin.services.index
-        Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index'); // Becomes admin.orders.index
+
+        // --- FIXED ORDER ROUTES ---
+        Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
+        Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show'); // <-- FIX HERE
+        Route::post('/orders/{order}/refund', [AdminOrderController::class, 'refund'])->name('orders.refund'); // <-- FIX HERE
+
         Route::get('/dashboard', DashboardController::class)->name('dashboard'); // Becomes admin.dashboard (Corrected from admin.admin.dashboard)
 
         // --- Activities (Corrected) ---
@@ -79,11 +84,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/car-rentals/{carRental}/images', [AdminCarRentalController::class, 'storeImage'])->name('rentals.images.store'); // Becomes admin.rentals.images.store
         Route::delete('/car-rentals/{carRental}/images/{image}', [AdminCarRentalController::class, 'destroyImage'])->name('rentals.images.destroy'); // Becomes admin.rentals.images.destroy
         Route::post('/car-rentals/{carRental}/thumbnail', [AdminCarRentalController::class, 'updateThumbnail'])
-             ->name('rentals.thumbnail.update'); // Becomes admin.rentals.thumbnail.update
+                ->name('rentals.thumbnail.update'); // Becomes admin.rentals.thumbnail.update
         Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals'); // Use 'rentals' base name -> admin.rentals.index etc.
 
 
         Route::resource('discount-codes', AdminDiscountCodeController::class)->names('discount-codes');
+
 
         Route::resource('posts', AdminPostController::class)->names('posts');
     });

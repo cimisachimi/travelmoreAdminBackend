@@ -23,8 +23,11 @@ class User extends Authenticatable
         'email',
         'password',
         'role', // Add role here
+        'google_id', // Add this
+        'facebook_id', // Add this
+        'avatar', // Add this
     ];
-    
+
     public const ROLE_ADMIN = 'admin';
     public const ROLE_CLIENT = 'client';
 

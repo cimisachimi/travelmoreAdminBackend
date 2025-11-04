@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
 use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
+
+use App\Http\Controllers\Api\SocialiteController; // Add this import
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -45,9 +47,17 @@ Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
 
 // ✅ ADD THESE TWO NEW ROUTES FOR THE BLOG
-    Route::get('/public/posts', [PublicPostController::class, 'index']);
-    Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
+Route::get('/public/posts', [PublicPostController::class, 'index']);
+Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
+
+
+
+// SOCIALITE AUTH ROUTES
+Route::get('/auth/{provider}/redirect', [SocialiteController::class, 'redirectToProvider']);
+Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProviderCallback']);
 /*
+
+
 |--------------------------------------------------------------------------
 | Authenticated Client API Routes
 |--------------------------------------------------------------------------

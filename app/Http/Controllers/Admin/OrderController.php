@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http; // Make sure this is imported
 use Inertia\Inertia;
 
 class OrderController extends Controller
@@ -14,9 +15,13 @@ class OrderController extends Controller
      */
     public function index()
     {
-        // Eager-load the user, orderItems, and transaction relationships
-        $orders = Order::with(['user', 'orderItems', 'transaction'])
-            ->latest() // Show newest orders first
+        // Eager load the relationships your Index.jsx file needs
+        $orders = Order::with([
+            'user',
+            'orderItems', // Use 'orderItems' (camelCase)
+            'transaction' // This correctly gets the one with status = 'settlement'
+        ])
+            ->latest()
             ->paginate(10);
 
         return Inertia::render('Admin/Order/Index', [
@@ -25,30 +30,90 @@ class OrderController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * Show the specified order.
      */
     public function show(Order $order)
     {
-        // You might want to load relationships for a detail view here too
-        $order->load(['user', 'orderItems.orderable', 'transaction']);
+        // Eager load all data for the detail view
+        $order->load([
+            'user',
+            'orderItems', // Use 'orderItems'
+            'transaction', // Gets the 'settlement' transaction
+            'transactions', // Gets ALL transactions (to find refunds, etc.)
+            'booking.bookable'
+        ]);
 
-        // Example: Return JSON or render a detail page
-        return response()->json($order);
+        return Inertia::render('Admin/Order/Show', [
+            'order' => $order,
+        ]);
     }
 
     /**
-     * Update the specified resource in storage.
+     * Issue a refund for a specific order via Midtrans.
      */
-    public function update(Request $request, Order $order)
+    public function refund(Request $request, Order $order)
     {
-        // Example: Update order status (e.g., to 'delivered')
-        $request->validate([
-            'status' => 'required|string|in:pending,paid,partially_paid,delivered,cancelled',
-        ]);
+        // --- THIS IS THE NEW, CORRECTED LOGIC ---
 
-        $order->status = $request->status;
-        $order->save();
+        // 1. Check if a refund has already been issued
+        $refundedTransaction = $order->transactions()
+                                     ->where('status', 'refund')
+                                     ->first();
 
-        return redirect()->back()->with('success', 'Order status updated.');
+        if ($refundedTransaction) {
+            return back()->with('error', 'This order has already been refunded.');
+        }
+
+        // 2. Find the original 'settlement' transaction to be refunded
+        $transactionToRefund = $order->transactions()
+                                     ->where('status', 'settlement')
+                                     ->first();
+
+        if (!$transactionToRefund) {
+            return back()->with('error', 'No successful payment transaction found to refund.');
+        }
+
+        // 3. Get Midtrans config
+        $serverKey = config('midtrans.server_key');
+        $isProduction = config('midtrans.is_production');
+        $baseUrl = $isProduction
+            ? 'https://api.midtrans.com'
+            : 'https://api.sandbox.midtrans.com';
+
+        // Use the transaction's code as the Midtrans Order ID
+        $midtransOrderId = $transactionToRefund->transaction_code;
+
+        try {
+            // 4. Make the API call to Midtrans to refund
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'Authorization' => 'Basic ' . base64_encode($serverKey . ':')
+            ])->post("{$baseUrl}/v2/{$midtransOrderId}/refund", [
+                'refund_key' => 'order-' . $order->id . '-refund-' . time(),
+                'reason' => 'Refund requested by admin'
+            ]);
+
+            $responseBody = $response->json();
+
+            // 5. Handle Midtrans response
+            if ($response->successful() && isset($responseBody['status_code']) && $responseBody['status_code'] == '200') {
+
+                // 6. Update your local database
+                // We update the original transaction to 'refund'
+                $transactionToRefund->update(['status' => 'refund']);
+
+                // We also update the order status
+                $order->update(['status' => 'cancelled']);
+
+                return back()->with('success', 'Refund processed successfully.');
+
+            } else {
+                return back()->with('error', 'Midtrans Error: ' . ($responseBody['status_message'] ?? 'Unknown error'));
+            }
+
+        } catch (\Exception $e) {
+            return back()->with('error', 'Refund failed: ' . $e->getMessage());
+        }
     }
 }
