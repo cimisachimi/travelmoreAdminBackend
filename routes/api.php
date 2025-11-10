@@ -14,7 +14,8 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
 use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
-
+use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
+use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
 /*
 |--------------------------------------------------------------------------
@@ -50,8 +51,6 @@ Route::post('/midtrans/notification', [PaymentController::class, 'notificationHa
 Route::get('/public/posts', [PublicPostController::class, 'index']);
 Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
 
-
-
 // SOCIALITE AUTH ROUTES
 Route::get('/auth/{provider}/redirect', [SocialiteController::class, 'redirectToProvider']);
 Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProviderCallback']);
@@ -70,6 +69,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
     Route::get('/user', fn (Request $request) => $request->user());
 
+    // PROFILE
+    Route::get('/my-profile', [ProfileController::class, 'show']);     // ✅ 3. ADD THIS (For SettingsTab)
+    Route::put('/my-profile', [ProfileController::class, 'update']);   // ✅ 4. ADD THIS (For SettingsTab)
+    Route::get('/my-refunds', [RefundController::class, 'index']);    // ✅ 6. ADD THIS (For RefundsTab)
+
+    Route::post('/email/verification-notification', [ProfileController::class, 'resendVerification'])
+        ->name('verification.send');
+
+    Route::put('/email/update', [ProfileController::class, 'updateEmail']); // ✅ ADD THIS
     // --- Trip Planner ---
     Route::get('/trip-planner', [TripPlannerController::class, 'show']);
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
@@ -85,7 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Orders & History ---
     Route::get('/my-orders', [OrderController::class, 'index']);
     Route::get('/my-orders/{id}', [OrderController::class, 'show']); // Added show route
-    Route::get('/bookings', [BookingController::class, 'index']); // Get user's bookings (consider removing if orders are enough)
+    Route::get('/my-bookings', [BookingController::class, 'index']); // Get user's bookings (consider removing if orders are enough)
     // Removed old booking show/update/delete, manage through orders
 
     // --- Payment ---

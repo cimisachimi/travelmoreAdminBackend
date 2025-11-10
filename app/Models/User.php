@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail; // ✅ Import this
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens; // ✅ Import the HasApiTokens trait
+use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+// ✅ Implement the MustVerifyEmail contract here
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens; // ✅ Use the trait here
+    use HasFactory, Notifiable, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -26,6 +27,9 @@ class User extends Authenticatable
         'google_id', // Add this
         'facebook_id', // Add this
         'avatar', // Add this
+        'full_name',    // ✅ ADD THIS
+        'phone_number', // ✅ ADD THIS
+        'nationality',  // ✅ ADD THIS
     ];
 
     public const ROLE_ADMIN = 'admin';
