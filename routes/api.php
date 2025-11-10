@@ -15,7 +15,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
 use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
 use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
-use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
+//use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
 /*
 |--------------------------------------------------------------------------
@@ -72,7 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // PROFILE
     Route::get('/my-profile', [ProfileController::class, 'show']);     // ✅ 3. ADD THIS (For SettingsTab)
     Route::put('/my-profile', [ProfileController::class, 'update']);   // ✅ 4. ADD THIS (For SettingsTab)
-    Route::get('/my-refunds', [RefundController::class, 'index']);    // ✅ 6. ADD THIS (For RefundsTab)
+ //   Route::get('/my-refunds', [RefundController::class, 'index']);    // ✅ 6. ADD THIS (For RefundsTab)
 
     Route::post('/email/verification-notification', [ProfileController::class, 'resendVerification'])
         ->name('verification.send');
@@ -115,8 +115,6 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     // Using apiResource automatically creates standard CRUD routes
     // (index, store, show, update, destroy)
 
-    Route::apiResource('users', ApiAdminUserController::class); // Use aliased controller
-    Route::apiResource('holiday-packages', AdminHolidayPackageController::class);
     // Add apiResources for other admin sections (CarRentals, Activities, Orders, etc.) here
     // Example:
     // Route::apiResource('car-rentals', \App\Http\Controllers\Admin\CarRentalController::class);
