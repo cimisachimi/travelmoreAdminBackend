@@ -17,6 +17,8 @@ use App\Http\Controllers\Api\Public\PostController as PublicPostController; // �
 use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
 //use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
+
+use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -54,6 +56,10 @@ Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
 // SOCIALITE AUTH ROUTES
 Route::get('/auth/{provider}/redirect', [SocialiteController::class, 'redirectToProvider']);
 Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProviderCallback']);
+
+Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+    ->name('verification.verify.api') // <-- Must match the name from Step 1
+    ->middleware(['signed', 'throttle:6,1']); // 'signed' middleware is crucial for security
 /*
 
 
@@ -68,6 +74,9 @@ Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProv
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
     Route::get('/user', fn (Request $request) => $request->user());
+
+    Route::post('/email/verification-notification', [ProfileController::class, 'resendVerification'])
+        ->name('verification.send');
 
     // PROFILE
     Route::get('/my-profile', [ProfileController::class, 'show']);     // ✅ 3. ADD THIS (For SettingsTab)
