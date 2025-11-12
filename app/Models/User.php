@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Notifications\Auth\CustomVerifyEmailNotification; // 1. IMPORT YOUR NEW NOTIFICATION
 
 // ✅ Implement the MustVerifyEmail contract here
 class User extends Authenticatable implements MustVerifyEmail
@@ -74,6 +75,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function orders()
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function sendEmailVerificationNotification()
+    {
+        $this->notify(new CustomVerifyEmailNotification);
     }
 
 }
