@@ -33,6 +33,10 @@ class BookingController extends Controller
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
             // ✅ FIX: Removed 'total_price' from validation. We calculate it on the server.
+            // ✅ ADD THESE FIELDS
+            'phone_number'    => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255',
+            'pickup_time'     => 'required|date_format:H:i', // e.g., "10:30"
         ]);
 
         $startDate = Carbon::parse($validated['start_date']);
@@ -95,7 +99,19 @@ class BookingController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'booking_date' => $startDate,
-                'details' => ['from_controller' => 'storeCarRentalBooking'],
+                'details' => [
+                // Snapshot of the car itself
+                'service_name'  => $carRental->brand . ' ' . $carRental->car_model,
+                'car_model'     => $carRental->car_model,
+                'brand'         => $carRental->brand,
+                'price_per_day' => $carRental->price_per_day,
+                'total_days'    => $requestedDays,
+
+                // New fields from the user request
+                'phone_number'    => $validated['phone_number'],
+                'pickup_location' => $validated['pickup_location'],
+                'pickup_time'     => $validated['pickup_time'],
+            ]
             ]);
             $carRental->bookings()->save($booking);
 
