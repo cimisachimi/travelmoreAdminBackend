@@ -27,21 +27,25 @@ class ProfileController extends Controller
     {
         $user = Auth::user();
 
+        // ✅ MODIFIED VALIDATION:
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'full_name' => 'nullable|string|max:255',
-            'phone_number' => 'nullable|string|max:20',
+
+            // This regex checks for a '+' followed by 1-15 digits.
+            // It's a simple, effective E.164 check.
+            'phone_number' => ['nullable', 'string', 'regex:/^\+[1-9]\d{1,14}$/'],
+
             'nationality' => ['nullable', 'string', Rule::in(['WNI', 'WNA'])],
         ]);
+        // (showing the original method)
 
-        // !! IMPORTANT !!
-        // You must add 'full_name', 'phone_number', and 'nationality'
-        // to the $fillable array in your app/Models/User.php file!
-
+        // This update code is already in your file and correct!
         $user->update($validated);
 
         return response()->json($user);
     }
+
     public function updateEmail(Request $request)
     {
         $user = Auth::user();
