@@ -83,9 +83,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/my-profile', [ProfileController::class, 'update']);   // ✅ 4. ADD THIS (For SettingsTab)
  //   Route::get('/my-refunds', [RefundController::class, 'index']);    // ✅ 6. ADD THIS (For RefundsTab)
 
-    Route::post('/email/verification-notification', [ProfileController::class, 'resendVerification'])
-        ->name('verification.send');
-
     Route::put('/email/update', [ProfileController::class, 'updateEmail']); // ✅ ADD THIS
     // --- Trip Planner ---
     Route::get('/trip-planner', [TripPlannerController::class, 'show']);
