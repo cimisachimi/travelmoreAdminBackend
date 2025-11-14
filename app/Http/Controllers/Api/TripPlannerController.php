@@ -30,7 +30,7 @@ class TripPlannerController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        
+
         // This is a powerful Eloquent method that finds a record
         // based on the first array, and if it exists, updates it
         // with the second array. If not, it creates a new one.

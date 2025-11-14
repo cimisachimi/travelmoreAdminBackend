@@ -63,6 +63,9 @@ Route::middleware('auth')->group(function () {
 
 
         Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index'); // Becomes admin.planners.index
+        Route::get('/trip-planners/{tripPlanner}/edit', [AdminTripPlannerController::class, 'edit'])->name('planners.edit'); // Becomes admin.planners.edit
+        Route::put('/trip-planners/{tripPlanner}', [AdminTripPlannerController::class, 'update'])->name('planners.update'); // Becomes admin.planners.update
+
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('transactions.index'); // Becomes admin.transactions.index
         Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index'); // Becomes admin.services.index
 

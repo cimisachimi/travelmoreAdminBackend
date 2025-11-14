@@ -287,7 +287,14 @@ class BookingController extends Controller
             'start_date' => 'required|date|after_or_equal:today',
             'adults' => 'required|integer|min:1',
             'children' => 'sometimes|integer|min:0',
-            'discount_code' => 'nullable|string|exists:discount_codes,code'
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255',
+            'flight_number' => 'nullable|string|max:50', // Optional
+            'special_request' => 'nullable|string',     // Optional
         ]);
 
         $user = Auth::user();
@@ -350,9 +357,24 @@ class BookingController extends Controller
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
+                    // Guest & Contact Info
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+
+                    // Participant Counts
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
+
+                    // Pickup & Travel Info
+                    'pickup_location' => $validated['pickup_location'],
+                    'flight_number' => $validated['flight_number'] ?? null,
+                    'special_request' => $validated['special_request'] ?? null,
+
+                    // Pricing & Service Snapshot
+                    'service_name' => $package->name, // Store the package name
                     'price_per_pax' => $pricePerPax,
                     'original_subtotal' => $subtotal,
                     'discount_applied' => $discountAmount
@@ -398,6 +420,12 @@ class BookingController extends Controller
         $validated = $request->validate([
             'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'quantity' => 'required|integer|min:1',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255', // e.g., Hotel name
+            'special_request' => 'nullable|string',
         ]);
 
         if ($activity->status !== 'active') {
@@ -447,7 +475,21 @@ class BookingController extends Controller
                 'booking_date' => $validated['booking_date'],
                 'start_date' => $validated['booking_date'],
                 'details' => [
+                    // Guest & Contact Info
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+
+                    // Activity Info
                     'quantity' => $validated['quantity'],
+                    'pickup_location' => $validated['pickup_location'],
+                    'special_request' => $validated['special_request'] ?? null,
+
+                    // Pricing & Service Snapshot
+                    'service_name' => $activity->name,
+                    'price_per_person' => $pricePerPax,
+                    'original_subtotal' => $subtotal,
                 ],
             ]);
 
