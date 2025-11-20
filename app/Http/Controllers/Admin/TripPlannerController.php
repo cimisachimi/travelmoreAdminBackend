@@ -4,17 +4,51 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\TripPlanner;
+use App\Models\Setting; // ✅ ADD THIS
+use Illuminate\Http\Request; // ✅ ADD THIS
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Cache; // ✅ ADD THIS
 
 class TripPlannerController extends Controller
 {
+    /**
+     * Display a listing of the resource.
+     */
     public function index()
     {
+        // Get the paginated planners
+        $planners = TripPlanner::with('user')->latest()->paginate(10);
+
+        // Get the general price from settings
+        $tripPlannerPrice = Setting::where('key', 'trip_planner_price')->first()->value ?? 0;
+
         return Inertia::render('Admin/TripPlanner/Index', [
-            'planners' => TripPlanner::with('user')->latest()->paginate(10), // ✅ Use paginate()
+            'planners' => $planners,
+            'tripPlannerPrice' => $tripPlannerPrice, // ✅ Pass the price to the page
         ]);
     }
-    // ✅ ADD THIS NEW METHOD TO SHOW THE EDIT PAGE
+
+    /**
+     * ✅ ADD THIS NEW METHOD
+     * Update the general trip planner price.
+     */
+    public function updateGeneralPrice(Request $request)
+    {
+        $validated = $request->validate([
+            'trip_planner_price' => 'required|numeric|min:0',
+        ]);
+
+        Setting::updateOrCreate(
+            ['key' => 'trip_planner_price'],
+            ['value' => $validated['trip_planner_price']]
+        );
+
+        Cache::forget('trip_planner_price'); // Clear cache if you use it
+
+        return redirect()->route('admin.planners.index')->with('success', 'General price updated.');
+    }
+
+
     /**
      * Show the form for editing the specified resource.
      */
@@ -25,7 +59,6 @@ class TripPlannerController extends Controller
         ]);
     }
 
-    // ✅ ADD THIS NEW METHOD TO SAVE THE PRICE
     /**
      * Update the specified resource in storage.
      */
@@ -37,10 +70,8 @@ class TripPlannerController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        // This works because 'price', 'status', and 'notes' are in your $fillable array
-        //
         $tripPlanner->update($validated);
 
-        return redirect()->route('admin.trip-planner.index')->with('success', 'Trip Planner updated successfully.');
+        return redirect()->route('admin.planners.index')->with('success', 'Trip Planner updated successfully.');
     }
 }

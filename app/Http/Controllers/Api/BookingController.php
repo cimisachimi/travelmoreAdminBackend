@@ -193,7 +193,29 @@ class BookingController extends Controller
         $user = Auth::user();
         $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
-        $subtotal = $tripPlanner->price;
+
+        // --- ✅ START: PRICE LOGIC CHANGE ---
+
+        // 1. Get the general consultation price from the settings table
+        $setting = Setting::where('key', 'trip_planner_price')->first();
+
+        // 2. Check if setting exists and is valid
+        if (!$setting || !is_numeric($setting->value) || $setting->value <= 0) {
+            Log::error('TRIP_PLANNER_PRICE setting is not set, invalid, or zero.');
+            return response()->json(['message' => 'Service is not configured. Please contact support.'], 500);
+        }
+
+        // 3. Set the subtotal to this general price
+        $subtotal = $setting->value;
+
+        // 4. (Important!) Save this price to the specific planner
+        // This "freezes" the price for this user's submission
+        $tripPlanner->price = $subtotal;
+        $tripPlanner->status = 'Approved'; // Or 'Pending Payment'
+        $tripPlanner->save();
+
+        // --- ✅ END: PRICE LOGIC CHANGE ---
+
 
         $discountAmount = 0;
         $discountCodeId = null;
@@ -254,7 +276,7 @@ class BookingController extends Controller
                 'order_id' => $order->id,
                 'orderable_id' => $tripPlanner->id,
                 'orderable_type' => TripPlanner::class,
-                'name' => 'Custom Trip Plan', // ✅ FIX: Added a descriptive name
+                'name' => 'Custom Trip Plan',
                 'quantity' => 1,
                 'price' => $subtotal,
             ]);

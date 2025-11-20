@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ActivityController; // Make sure this is imported
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeController;
 use App\Http\Controllers\Admin\PostController as AdminPostController;
+use App\Http\Controllers\Admin\SettingController as AdminSettingController; // ✅ ADD THIS
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -61,10 +62,10 @@ Route::middleware('auth')->group(function () {
         Route::resource('holiday-packages', AdminHolidayPackageController::class)
             ->names('packages'); // Use 'packages' base name -> admin.packages.index etc.
 
-
-        Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index'); // Becomes admin.planners.index
-        Route::get('/trip-planners/{tripPlanner}/edit', [AdminTripPlannerController::class, 'edit'])->name('planners.edit'); // Becomes admin.planners.edit
-        Route::put('/trip-planners/{tripPlanner}', [AdminTripPlannerController::class, 'update'])->name('planners.update'); // Becomes admin.planners.update
+        Route::put('/trip-planners/update-price', [AdminTripPlannerController::class, 'updateGeneralPrice'])->name('planners.update-price');
+        Route::get('/trip-planners', [AdminTripPlannerController::class, 'index'])->name('planners.index');
+        Route::get('/trip-planners/{tripPlanner}/edit', [AdminTripPlannerController::class, 'edit'])->name('planners.edit');
+        Route::put('/trip-planners/{tripPlanner}', [AdminTripPlannerController::class, 'update'])->name('planners.update');
 
         Route::get('/transactions', [AdminTransactionController::class, 'index'])->name('transactions.index'); // Becomes admin.transactions.index
         Route::get('/services', [AdminServiceController::class, 'index'])->name('services.index'); // Becomes admin.services.index
@@ -95,6 +96,8 @@ Route::middleware('auth')->group(function () {
 
 
         Route::resource('posts', AdminPostController::class)->names('posts');
+
+        // ✅ ADD THESE TWO NEW ROUTES (e.g., at the end of the group)
     });
 });
 

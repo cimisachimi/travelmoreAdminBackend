@@ -17,7 +17,7 @@ use App\Http\Controllers\Api\Public\PostController as PublicPostController; // �
 use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
 //use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
-
+use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
 use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
 /*
 |--------------------------------------------------------------------------
@@ -60,7 +60,11 @@ Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProv
 Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
     ->name('verification.verify.api') // <-- Must match the name from Step 1
     ->middleware(['signed', 'throttle:6,1']); // 'signed' middleware is crucial for security
+
+Route::get('/public/planner-config', [PlannerController::class, 'getConfig']);
 /*
+
+
 
 
 |--------------------------------------------------------------------------
