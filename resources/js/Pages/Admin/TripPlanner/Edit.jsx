@@ -4,183 +4,231 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/Com
 import { Label } from "@/Components/ui/label";
 import { Input } from "@/Components/ui/input";
 import { Textarea } from "@/Components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/Components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import { Button } from "@/Components/ui/button";
 import InputError from "@/Components/InputError";
-import { Separator } from "@/Components/ui/separator";
+import { Badge } from "@/Components/ui/badge";
+import QuillEditor from "@/Components/QuillEditor";
 
-// Helper component for displaying details
-const DetailItem = ({ label, value }) => (
-  <div>
-    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">{label}</dt>
-    <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{value || '-'}</dd>
+// Helper for clean data display
+const DetailRow = ({ label, value, fullWidth = false }) => (
+  <div className={`${fullWidth ? "col-span-2" : "col-span-1"}`}>
+    <dt className="text-xs font-semibold uppercase text-gray-500 tracking-wider">{label}</dt>
+    <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 break-words whitespace-pre-wrap">
+      {value || <span className="text-gray-400 italic">Not specified</span>}
+    </dd>
   </div>
 );
+
+// Helper to join array data or show string
+const formatList = (data) => {
+    if (Array.isArray(data)) return data.join(', ');
+    if (typeof data === 'string' && data.startsWith('[')) {
+        try {
+            return JSON.parse(data).join(', ');
+        } catch (e) {
+            return data;
+        }
+    }
+    return data;
+};
 
 export default function Edit({ auth, tripPlanner }) {
   const { data, setData, put, processing, errors } = useForm({
     price: tripPlanner.price || 0,
     status: tripPlanner.status || "Pending",
     notes: tripPlanner.notes || "",
+    recommendation_content: tripPlanner.recommendation_content || "",
   });
 
   const submit = (e) => {
     e.preventDefault();
-    // Use the correct route name from Step 1
     put(route("admin.planners.update", tripPlanner.id), {
         preserveScroll: true,
     });
   };
 
-  const totalPax = (tripPlanner.adults || 0) + (tripPlanner.children || 0) + (tripPlanner.infants || 0);
+  // Calculate total pax
+  const totalPax = (parseInt(tripPlanner.pax_adults) || 0) +
+                   (parseInt(tripPlanner.pax_teens) || 0) +
+                   (parseInt(tripPlanner.pax_kids) || 0) +
+                   (parseInt(tripPlanner.pax_seniors) || 0);
+
+  // Address formatter
+  const fullAddress = [
+    tripPlanner.address,
+    tripPlanner.city,
+    tripPlanner.province,
+    tripPlanner.postal_code,
+    tripPlanner.country
+  ].filter(Boolean).join(', ');
 
   return (
     <AuthenticatedLayout
       user={auth.user}
       header={
-        <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-          Review Trip Plan #{tripPlanner.id}
-        </h2>
+        <div className="flex justify-between items-center">
+            <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+            Manage Trip Request #{tripPlanner.id}
+            </h2>
+            <div className="flex gap-2">
+                <Badge variant={tripPlanner.status === 'Approved' ? 'default' : 'secondary'}>
+                    {tripPlanner.status}
+                </Badge>
+            </div>
+        </div>
       }
     >
       <Head title={`Trip Plan #${tripPlanner.id}`} />
 
-      <div className="py-12">
-        <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="py-6 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-full">
+        <form onSubmit={submit} className="grid grid-cols-1 xl:grid-cols-2 gap-6 h-full">
 
-          {/* Column 1: Form to change price/status */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>Admin Actions</CardTitle>
-                <CardDescription>
-                  Set the price and status for this trip plan.
-                </CardDescription>
+          {/* LEFT COLUMN: User Context (Detailed View) */}
+          <div className="space-y-6">
+            <Card className="h-fit">
+              <CardHeader className="bg-gray-50 dark:bg-gray-800/50 pb-4">
+                <CardTitle className="text-lg">User Requirements</CardTitle>
+                <CardDescription>Full details submitted by the user.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={submit} className="space-y-6">
-                  {/* Price Input */}
-                  <div>
-                    <Label htmlFor="price">Set Price (IDR)</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      value={data.price}
-                      onChange={(e) => setData("price", e.target.value)}
-                      className="mt-1 block w-full"
-                    />
-                    <InputError message={errors.price} className="mt-2" />
-                  </div>
+              <CardContent className="pt-6 grid grid-cols-2 gap-y-6 gap-x-4 max-h-[800px] overflow-y-auto">
 
-                  {/* Status Select */}
-                  <div>
-                    <Label htmlFor="status">Set Status</Label>
-                    <Select
-                      value={data.status}
-                      onValueChange={(value) => setData("status", value)}
-                    >
-                      <SelectTrigger className="w-full mt-1">
-                        <SelectValue placeholder="Select a status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Pending">Pending</SelectItem>
-                        <SelectItem value="Approved">Approved</SelectItem>
-                        <SelectItem value="Rejected">Rejected</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <InputError message={errors.status} className="mt-2" />
-                  </div>
+                {/* 1. Contact & Identity */}
+                <div className="col-span-2 pb-2 border-b border-gray-100 mb-2">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">👤 Traveler Profile</h3>
+                </div>
+                <DetailRow label="Full Name" value={tripPlanner.full_name} />
+                <DetailRow label="Email" value={tripPlanner.email} />
+                <DetailRow label="Phone" value={tripPlanner.phone} />
+                <DetailRow label="Frequent Traveler?" value={tripPlanner.is_frequent_traveler === 'yes' ? 'Yes' : 'No'} />
 
-                  {/* Notes Textarea */}
-                  <div>
-                    <Label htmlFor="notes">Admin Notes (Optional)</Label>
-                    <Textarea
-                      id="notes"
-                      value={data.notes}
-                      onChange={(e) => setData("notes", e.target.value)}
-                      className="mt-1 block w-full"
-                      rows={4}
-                      placeholder="Notes for the user or internal team..."
-                    />
-                    <InputError message={errors.notes} className="mt-2" />
-                  </div>
+                {(tripPlanner.company_name || tripPlanner.brand_name) && (
+                    <>
+                        <DetailRow label="Company" value={tripPlanner.company_name} />
+                        <DetailRow label="Brand" value={tripPlanner.brand_name} />
+                    </>
+                )}
 
-                  {/* Form Actions */}
-                  <div className="flex items-center gap-4">
-                    <Button disabled={processing}>
-                      {processing ? "Saving..." : "Save Changes"}
-                    </Button>
-                    <Link
-                      href={route("admin.planners.index")}
-                      className="text-sm text-gray-600 dark:text-gray-400 hover:underline"
-                    >
-                      Cancel
-                    </Link>
-                  </div>
-                </form>
+                <DetailRow label="Full Address" value={fullAddress} fullWidth />
+
+                {/* 2. Trip Logistics */}
+                <div className="col-span-2 pb-2 border-b border-gray-100 mt-4 mb-2">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">✈️ Trip Logistics</h3>
+                </div>
+                <DetailRow label="Trip Type" value={tripPlanner.trip_type} />
+                <DetailRow label="Travel Type" value={tripPlanner.travel_type} />
+                <DetailRow label="Departure Date" value={tripPlanner.departure_date} />
+                <DetailRow label="Duration" value={tripPlanner.duration} />
+                <DetailRow label="Budget Pack" value={tripPlanner.budget_pack} />
+                <DetailRow label="Total Pax" value={`${totalPax} People`} />
+
+                <div className="col-span-2 grid grid-cols-4 gap-2 bg-gray-50 p-2 rounded text-center">
+                    <div><span className="block text-xs text-gray-500">Adults</span><span className="font-bold">{tripPlanner.pax_adults || 0}</span></div>
+                    <div><span className="block text-xs text-gray-500">Teens</span><span className="font-bold">{tripPlanner.pax_teens || 0}</span></div>
+                    <div><span className="block text-xs text-gray-500">Kids</span><span className="font-bold">{tripPlanner.pax_kids || 0}</span></div>
+                    <div><span className="block text-xs text-gray-500">Seniors</span><span className="font-bold">{tripPlanner.pax_seniors || 0}</span></div>
+                </div>
+
+                {/* 3. Detailed Preferences */}
+                <div className="col-span-2 pb-2 border-b border-gray-100 mt-4 mb-2">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">🎨 Preferences & Style</h3>
+                </div>
+
+                <DetailRow label="Travel Style" value={formatList(tripPlanner.travel_style)} fullWidth />
+                {tripPlanner.other_travel_style && <DetailRow label="Other Style" value={tripPlanner.other_travel_style} fullWidth />}
+
+                <DetailRow label="Travel Personality" value={formatList(tripPlanner.travel_personality)} fullWidth />
+                {tripPlanner.other_travel_personality && <DetailRow label="Other Personality" value={tripPlanner.other_travel_personality} fullWidth />}
+
+                <DetailRow label="Accommodation" value={tripPlanner.accommodation_preference} fullWidth />
+
+                <DetailRow label="Food Preferences" value={formatList(tripPlanner.food_preference)} fullWidth />
+                {tripPlanner.other_food_preference && <DetailRow label="Other Food" value={tripPlanner.other_food_preference} fullWidth />}
+
+                <DetailRow label="Activity Level" value={tripPlanner.activity_level} />
+                <DetailRow label="Attractions" value={tripPlanner.attraction_preference} />
+
+                <DetailRow label="Budget Priorities" value={formatList(tripPlanner.budget_priorities)} fullWidth />
+                <DetailRow label="Add-ons" value={formatList(tripPlanner.addons)} fullWidth />
+
+                <div className="col-span-2 mt-2">
+                    <dt className="text-xs font-semibold uppercase text-gray-500 tracking-wider mb-1">Must Visit / Special Requests</dt>
+                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-sm text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 min-h-[60px]">
+                        {tripPlanner.must_visit || "None"}
+                    </div>
+                </div>
+
               </CardContent>
             </Card>
           </div>
 
-          {/* Column 2: Detailed View of the submission */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>User Submission Details</CardTitle>
-                <CardDescription>
-                  This is the original information submitted by the user.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-                  {/* Contact Info */}
-                  <DetailItem label="Full Name" value={tripPlanner.full_name} />
-                  <DetailItem label="Email" value={tripPlanner.email} />
-                  <DetailItem label="Phone Number" value={tripPlanner.phone_number} />
-                  <DetailItem label="Country" value={tripPlanner.country_of_residence} />
-                  <DetailItem label="Company Name" value={tripPlanner.company_name} />
-                  <DetailItem label="Submitted By" value={tripPlanner.user?.name || 'Guest'} />
+          {/* RIGHT COLUMN: Workspace (Action) */}
+          <div className="space-y-6 flex flex-col h-full">
 
-                  <Separator className="md:col-span-2" />
-
-                  {/* Trip Info */}
-                  <DetailItem label="Trip Type" value={tripPlanner.trip_type} />
-                  <DetailItem label="Travel Type" value={tripPlanner.travel_type} />
-                  <DetailItem label="Destination" value={tripPlanner.destination} />
-                  <DetailItem label="Budget Pack" value={tripPlanner.budget_pack} />
-                  <DetailItem label="Departure Date" value={new Date(tripPlanner.departure_date).toLocaleDateString()} />
-                  <DetailItem label="Return Date" value={new Date(tripPlanner.return_date).toLocaleDateString()} />
-
-                  <Separator className="md:col-span-2" />
-
-                  {/* Participant Info */}
-                  <DetailItem label="Participants" value={`${totalPax} Pax`} />
-                  <DetailItem label="Adults" value={tripPlanner.adults} />
-                  <DetailItem label="Children (2-11y)" value={tripPlanner.children} />
-                  <DetailItem label="Infants (<2y)" value={tripPlanner.infants} />
-
-                  <Separator className="md:col-span-2" />
-
-                  {/* Other Info */}
-                  <div className="md:col-span-2">
-                    <DetailItem label="Interests" value={tripPlanner.interests?.join(', ')} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <DetailItem label="Other Requests" value={tripPlanner.other_requests} />
-                  </div>
-
-                </dl>
-              </CardContent>
+            {/* 1. Recommendation Editor */}
+            <Card className="flex-1 flex flex-col shadow-md border-blue-200 dark:border-blue-900">
+                <CardHeader className="bg-blue-50 dark:bg-blue-900/20 py-4">
+                    <CardTitle className="text-blue-700 dark:text-blue-300 text-base">Craft Recommendation</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 pt-0 pb-4 px-4 flex flex-col min-h-[500px]">
+                    <div className="flex-1 mt-4">
+                        <QuillEditor
+                            value={data.recommendation_content}
+                            onChange={(val) => setData('recommendation_content', val)}
+                        />
+                    </div>
+                    <InputError message={errors.recommendation_content} className="mt-2" />
+                </CardContent>
             </Card>
-          </div>
 
-        </div>
+            {/* 2. Controls */}
+            <Card>
+                <CardHeader className="py-4">
+                    <CardTitle className="text-base">Finalize & Save</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6">
+                     {/* Price */}
+                    <div>
+                        <Label htmlFor="price">Trip Price (IDR)</Label>
+                        <Input
+                            id="price"
+                            type="number"
+                            className="mt-1"
+                            value={data.price}
+                            onChange={(e) => setData("price", e.target.value)}
+                        />
+                        <InputError message={errors.price} />
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                        <Label htmlFor="status">Submission Status</Label>
+                         <Select value={data.status} onValueChange={(val) => setData("status", val)}>
+                            <SelectTrigger className="mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Pending">🕒 Pending Review</SelectItem>
+                                <SelectItem value="Approved">✅ Approved (Send to User)</SelectItem>
+                                <SelectItem value="Rejected">❌ Rejected</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.status} />
+                    </div>
+
+                    <div className="md:col-span-2 pt-2 flex gap-4 justify-end">
+                        <Link href={route('admin.planners.index')}>
+                             <Button variant="outline" type="button">Cancel</Button>
+                        </Link>
+                        <Button type="submit" className="min-w-[150px]" disabled={processing}>
+                            {processing ? "Saving..." : "💾 Save & Update"}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+          </div>
+        </form>
       </div>
     </AuthenticatedLayout>
   );

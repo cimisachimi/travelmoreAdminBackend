@@ -10,25 +10,32 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Arr;
 use Inertia\Inertia; // Import Inertia facade
-use Illuminate\Validation\ValidationException; // [Add this]
+use Illuminate\Validation\ValidationException;
 
 class HolidayPackageController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        // Fetch paginated packages. Translations are usually loaded automatically.
-        // Eager load images to display thumbnails/counts if needed.
-        $packages = HolidayPackage::with('images') // Eager load images
-            ->latest() // Order by latest created
-            ->paginate(10); // Adjust pagination size as needed
+        $query = HolidayPackage::with('images');
 
-        // Render the Inertia view, passing the packages data
+        // ✅ ADD: Search Logic for Translatable Fields
+        if ($request->input('search')) {
+            $search = $request->input('search');
+            // Uses Astrotomic's whereTranslationLike for cleaner syntax on translated fields
+            $query->whereTranslationLike('name', "%{$search}%")
+                  ->orWhereTranslationLike('location', "%{$search}%");
+        }
+
+        $packages = $query->latest()
+            ->paginate(10)
+            ->withQueryString(); // Keep search params in pagination links
+
         return Inertia::render('Admin/HolidayPackage/Index', [
             'packages' => $packages,
-             // Pass any flash messages if set (e.g., from store/update/destroy)
+            'filters' => $request->only(['search']), // Pass search term back to view for the input field
             'successMessage' => session('success'),
             'errorMessage' => session('error'),
         ]);
@@ -39,21 +46,17 @@ class HolidayPackageController extends Controller
      */
     public function create()
     {
-        // Render the Inertia view for creating a package
-        // Pass any necessary data, like available locales if dynamic
         return Inertia::render('Admin/HolidayPackage/Create');
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Display the specified resource.
      */
-
     public function show(HolidayPackage $holidayPackage)
     {
-        // Load translations and images if not already loaded by route model binding
+        // Load translations and images
         $holidayPackage->load(['images', 'translations']);
 
-         // Render a detail view if you have one
          return Inertia::render('Admin/HolidayPackage/Show', [
              'package' => $holidayPackage
          ]);
@@ -65,12 +68,11 @@ class HolidayPackageController extends Controller
     public function edit(HolidayPackage $holidayPackage)
     {
         // Eager load images and translations
-        $holidayPackage->load(['images', 'translations']); // 'images' is crucial
+        $holidayPackage->load(['images', 'translations']);
 
         $packageData = $holidayPackage->toArray();
         $packageData['translations'] = $holidayPackage->getTranslationsArray();
 
-        // The 'images' array within $packageData will now contain 'full_url' for each image.
         return Inertia::render('Admin/HolidayPackage/Edit', [
             'package' => $packageData,
             'successMessage' => session('success'),
@@ -78,20 +80,18 @@ class HolidayPackageController extends Controller
         ]);
     }
 
-
-public function store(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
     {
         // 1. Validate request data
         $validatedData = $request->validate([
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
-            // [REMOVED] Old price fields
-            // 'price_regular' => 'required|numeric|min:0',
-            // 'price_exclusive' => 'required|numeric|min:0',
-            // 'price_child' => 'nullable|numeric|min:0',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
-            
+
             // [NEW] Validation for price_tiers
             'price_tiers' => 'required|array|min:1',
             'price_tiers.*.min_pax' => 'required|integer|min:1',
@@ -124,7 +124,6 @@ public function store(Request $request)
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ], [
-            // [NEW] Custom messages for price_tiers
             'price_tiers.required' => 'You must add at least one price tier.',
             'price_tiers.min' => 'You must add at least one price tier.',
             'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
@@ -138,19 +137,15 @@ public function store(Request $request)
         DB::beginTransaction();
         try {
             // 2. Prepare data for model creation (exclude images)
-             // We pass the validated arrays directly, relying on $casts
             $packageData = Arr::except($validatedData, ['images']);
 
-            // 3. Create the HolidayPackage (Model $casts handle array->JSON storage)
-            // The create method correctly handles translatable attributes
-            // The model accessor will handle the 'price_tiers' array
+            // 3. Create the HolidayPackage
             $package = HolidayPackage::create($packageData);
 
             // 4. Handle Image Uploads
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
-                    // Use 'url' key to match Image model's fillable property
                     $package->images()->create(['url' => $path]);
                 }
             }
@@ -180,10 +175,6 @@ public function store(Request $request)
         $validatedData = $request->validate([
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
-            // [REMOVED] Old price fields
-            // 'price_regular' => 'required|numeric|min:0',
-            // 'price_exclusive' => 'required|numeric|min:0',
-            // 'price_child' => 'nullable|numeric|min:0',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
 
@@ -221,7 +212,6 @@ public function store(Request $request)
             'delete_images' => 'nullable|array',
             'delete_images.*' => 'integer|exists:images,id'
         ], [
-             // [NEW] Custom messages for price_tiers
             'price_tiers.required' => 'You must add at least one price tier.',
             'price_tiers.min' => 'You must add at least one price tier.',
             'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
@@ -233,14 +223,13 @@ public function store(Request $request)
         ]);
 
         \Log::info("Attempting to update HolidayPackage ID: " . $holidayPackage->id);
-        \Log::info("Validated Data:", $validatedData);
 
         DB::beginTransaction();
         try {
             // 2. Separate translation data
             $translationData = [];
             foreach (['en', 'id'] as $locale) {
-                 if (isset($validatedData['name'][$locale])) { // Check based on a required field
+                 if (isset($validatedData['name'][$locale])) {
                     $translationData[$locale] = [
                         'name' => $validatedData['name'][$locale],
                         'description' => $validatedData['description'][$locale] ?? null,
@@ -250,19 +239,18 @@ public function store(Request $request)
                  }
             }
 
-            // 3. Prepare data for the main model update (including arrays, excluding translations & image fields)
+            // 3. Prepare data for the main model update
             $packageData = Arr::except($validatedData, ['images', 'delete_images', 'en', 'id']);
-             // Ensure array fields are set to null if empty/not provided to clear them if needed
+
+             // Ensure array fields are set to null if empty to clear them if needed
              $arrayFields = ['itinerary', 'cost', 'faqs', 'trip_info'];
              foreach ($arrayFields as $field) {
                  if (!isset($packageData[$field]) || !is_array($packageData[$field]) || empty($packageData[$field])) {
                      $packageData[$field] = null;
                  }
              }
-            // 'price_tiers' is now a required field, so it doesn't need to be in $arrayFields
 
-            // 4. Update the main model attributes (including arrays)
-            // Let $casts handle JSON conversion
+            // 4. Update the main model attributes
             $holidayPackage->fill($packageData);
 
             // 5. Update translations
@@ -270,13 +258,8 @@ public function store(Request $request)
                 $holidayPackage->translateOrNew($locale)->fill($data);
             }
 
-            \Log::info("Model state BEFORE save:", $holidayPackage->toArray());
-            \Log::info("Model dirty attributes:", $holidayPackage->getDirty());
-
             // 6. Save the model and translations
-            $isSaved = $holidayPackage->save();
-
-            \Log::info("HolidayPackage update save() result: " . ($isSaved ? 'Success' : 'Failed'));
+            $holidayPackage->save();
 
             // 7. Handle Image Deletion
             if ($request->filled('delete_images')) {
@@ -296,13 +279,11 @@ public function store(Request $request)
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
-                    // Use 'url' key to match Image model
                     $holidayPackage->images()->create(['url' => $path]);
                 }
             }
 
             DB::commit();
-            \Log::info("DB Commit successful for update. Redirecting...");
             return redirect()->route('admin.packages.index')->with('success', 'Holiday package updated successfully!');
 
         } catch (ValidationException $e) {
@@ -312,12 +293,11 @@ public function store(Request $request)
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error updating holiday package: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-             $previous = $e->getPrevious();
-             \Log::error($previous ? ('Previous Exception: ' . $previous->getMessage()) : 'No previous exception details.');
             return redirect()->back()->with('error', 'Failed to update holiday package. Error: Check logs.')->withInput();
         }
     }
-     /**
+
+    /**
      * Remove the specified resource from storage.
      */
     public function destroy(HolidayPackage $holidayPackage)
@@ -326,8 +306,9 @@ public function store(Request $request)
         try {
             // Delete associated images first
             foreach ($holidayPackage->images as $image) {
-                // [FIX] Use $image->url
-                Storage::disk('public')->delete($image->url);
+                if ($image->url) {
+                    Storage::disk('public')->delete($image->url);
+                }
                 $image->delete();
             }
 
@@ -335,14 +316,14 @@ public function store(Request $request)
             $holidayPackage->delete();
 
             DB::commit();
-             // Redirect back to index with success message
             return redirect()->route('admin.packages.index')->with('success', 'Holiday package deleted successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error deleting holiday package: ' . $e->getMessage());
-             // Redirect back to index with error message
-            return redirect()->route('admin.packages.index')->with('error', 'Failed to delete holiday package.');        }
+            return redirect()->route('admin.packages.index')->with('error', 'Failed to delete holiday package.');
+        }
     }
+
     public function storeImage(Request $request, HolidayPackage $package)
     {
         $request->validate([
@@ -353,52 +334,36 @@ public function store(Request $request)
         try {
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
-                    // Store the file and get its path
                     $path = $imageFile->store('holiday-packages', 'public');
 
-                    // --- >>> CHANGE 'path' TO 'url' HERE <<< ---
                     $package->images()->create([
-                        'url' => $path, // Use 'url' as the key to match the model/DB
-                        // 'type' => 'gallery', // Add type if you use it
+                        'url' => $path,
                     ]);
-                    // --- >>> END CHANGE <<< ---
                 }
             }
             return redirect()->route('admin.packages.edit', $package->id)->with('success', 'Images uploaded successfully!');
 
         } catch (\Exception $e) {
             \Log::error('Error uploading package image: ' . $e->getMessage());
-            $previous = $e->getPrevious();
-            // Log the specific SQL error if available
-            \Log::error($previous ? $previous->getMessage() : 'No previous exception details.');
             return redirect()->back()->with('error', 'Failed to upload images. Error: Check logs for details.');
         }
     }
 
     /**
      * Remove the specified image from storage and database.
-     * Mimics CarRentalController::destroyImage
-     */
-   /**
-     * Remove the specified image from storage and database.
      */
     public function destroyImage(HolidayPackage $package, Image $image)
     {
-         // Optional: Ownership check (good to keep)
+         // Optional: Ownership check
          if ($image->imageable_id !== $package->id || $image->imageable_type !== HolidayPackage::class) {
              return redirect()->back()->with('error', 'Image not found or does not belong to this package.');
          }
 
         try {
-            // ✅ Add a check for $image->url before deleting from storage
             if ($image->url) {
-                Storage::disk('public')->delete($image->url); // Only delete if path exists
-            } else {
-                // Optionally log a warning if the path was missing
-                 \Log::warning("Image record ID {$image->id} for package {$package->id} had a null URL/path upon deletion.");
+                Storage::disk('public')->delete($image->url);
             }
 
-            // Delete the image record (always do this)
             $image->delete();
 
             return redirect()->back()->with('success', 'Image deleted successfully!');
@@ -412,7 +377,7 @@ public function store(Request $request)
     public function updateThumbnail(Request $request, HolidayPackage $package)
     {
         $request->validate([
-            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048', // Validate the single thumbnail file
+            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);
 
         DB::beginTransaction();
@@ -420,16 +385,16 @@ public function store(Request $request)
             // Find and delete the existing thumbnail for this package, if any
             $existingThumbnail = $package->images()->where('type', 'thumbnail')->first();
             if ($existingThumbnail) {
-                Storage::disk('public')->delete($existingThumbnail->url); // Use 'url' column
+                Storage::disk('public')->delete($existingThumbnail->url);
                 $existingThumbnail->delete();
             }
 
             // Store the new thumbnail
-            $path = $request->file('thumbnail')->store('holiday-packages/thumbnails', 'public'); // Store in a subfolder
+            $path = $request->file('thumbnail')->store('holiday-packages/thumbnails', 'public');
 
             // Create the new thumbnail image record
             $package->images()->create([
-                'url' => $path, // Use 'url' column
+                'url' => $path,
                 'type' => 'thumbnail',
             ]);
 
@@ -440,8 +405,6 @@ public function store(Request $request)
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error updating package thumbnail: ' . $e->getMessage());
-             $previous = $e->getPrevious();
-             \Log::error($previous ? $previous->getMessage() : 'No previous exception details.');
             return redirect()->back()->with('error', 'Failed to update thumbnail. Error: Check logs.');
         }
     }

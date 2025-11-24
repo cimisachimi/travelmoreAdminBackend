@@ -19,6 +19,7 @@ use Carbon\Carbon;
 use App\Models\HolidayPackage;
 use App\Models\DiscountCode;
 use Illuminate\Validation\ValidationException;
+use App\Models\Setting; // <-- ADD THIS LINE
 
 class BookingController extends Controller
 {
@@ -211,7 +212,7 @@ class BookingController extends Controller
         // 4. (Important!) Save this price to the specific planner
         // This "freezes" the price for this user's submission
         $tripPlanner->price = $subtotal;
-        $tripPlanner->status = 'Approved'; // Or 'Pending Payment'
+        // REMOVED: $tripPlanner->status = 'Approved'; // This line causes the error
         $tripPlanner->save();
 
         // --- ✅ END: PRICE LOGIC CHANGE ---

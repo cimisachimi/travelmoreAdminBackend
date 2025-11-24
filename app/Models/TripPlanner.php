@@ -52,6 +52,7 @@ class TripPlanner extends Model
         'is_frequent_traveler',
         'travel_type',
         'price',
+        'recommendation_content', // ✅ Add this line
     ];
 
     /**
