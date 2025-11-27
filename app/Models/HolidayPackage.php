@@ -37,6 +37,7 @@ class HolidayPackage extends Model implements TranslatableContract
         'cost',
         'faqs',
         'trip_info',
+        'addons', // ✅ Add this
     ];
 
     // Casts untuk kolom non-terjemahan
@@ -51,6 +52,7 @@ class HolidayPackage extends Model implements TranslatableContract
         'cost' => 'array',
         'faqs' => 'array',
         'trip_info' => 'array',
+        'addons' => 'array', // ✅ Add this
     ];
 
     // [FIX 1] Add 'thumbnail_url' to the $appends array
@@ -153,7 +155,7 @@ class HolidayPackage extends Model implements TranslatableContract
                 }
             }
         }
-        
+
         // If $paxCount is lower than the first tier's min_pax, or no tier matches
         return null;
     }
@@ -177,7 +179,7 @@ class HolidayPackage extends Model implements TranslatableContract
             set: function ($value) {
                 if (is_array($value)) {
                     // Ensure keys are reset if it's a sparse array from the frontend
-                    $value = array_values($value); 
+                    $value = array_values($value);
                 }
                 return json_encode($value ?: []);
             }

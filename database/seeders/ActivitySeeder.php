@@ -24,6 +24,12 @@ class ActivitySeeder extends Seeder
                 'price' => 350000,
                 'status' => 'active',
                 'duration' => '3 Hours',
+                // ✅ ADD ADDONS JSON DATA
+                'addons' => [
+                    ['name' => 'GoPro Rental', 'price' => 150000],
+                    ['name' => 'Photographer', 'price' => 500000],
+                    ['name' => 'Extra Towel', 'price' => 25000]
+                ]
             ]);
 
             $act1->translations()->create([
@@ -47,6 +53,11 @@ class ActivitySeeder extends Seeder
                 'price' => 450000,
                 'status' => 'active',
                 'duration' => 'Half Day',
+                // ✅ ADD ADDONS JSON DATA
+                'addons' => [
+                    ['name' => 'Private Guide', 'price' => 300000],
+                    ['name' => 'Drone Footage', 'price' => 750000]
+                ]
             ]);
 
             $act2->translations()->create([

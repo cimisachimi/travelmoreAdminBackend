@@ -22,6 +22,7 @@ class Activity extends Model implements TranslatableContract
         'price',
         'status',
         'duration',
+        'addons', // ✅ Add this
     ];
 
     /**
@@ -34,6 +35,7 @@ class Activity extends Model implements TranslatableContract
         'description',
         'location',
         'category',
+
     ];
 
     /**
@@ -43,6 +45,7 @@ class Activity extends Model implements TranslatableContract
      */
     protected $casts = [
         'price' => 'decimal:2',
+        'addons' => 'array', // ✅ Add this
     ];
 
     /**

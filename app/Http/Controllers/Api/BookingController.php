@@ -316,8 +316,10 @@ class BookingController extends Controller
             'email' => 'required|email|max:255',
             'phone_number' => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
-            'flight_number' => 'nullable|string|max:50', // Optional
-            'special_request' => 'nullable|string',     // Optional
+            'flight_number' => 'nullable|string|max:50',
+            'special_request' => 'nullable|string',
+            'selected_addons' => 'nullable|array', // ✅ Accept array of addon names
+            'selected_addons.*' => 'string',
         ]);
 
         $user = Auth::user();
@@ -327,42 +329,67 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
+        // 1. Calculate Base Price
         $pricePerPax = $package->getPricePerPax($totalPax);
-
         if ($pricePerPax === null) {
             return response()->json([
                 'message' => 'Pricing is not available for the selected number of participants.'
             ], 400);
         }
+        $baseSubtotal = $pricePerPax * $totalPax;
 
-        $subtotal = $pricePerPax * $totalPax;
+        // 2. Calculate Add-ons
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($package->addons)) {
+            $availableAddons = collect($package->addons); // Convert DB JSON to collection
+
+            foreach ($validated['selected_addons'] as $addonName) {
+                // Find the addon in the database configuration
+                $addon = $availableAddons->firstWhere('name', $addonName);
+
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = [
+                        'name' => $addonName,
+                        'price' => $price
+                    ];
+                }
+            }
+        }
+
+        // 3. Apply Discount (only to base subtotal usually, but here applied to sum)
+        // Let's apply discount to the Base Subtotal only to be safe, or Total.
+        // Usually discounts don't apply to 3rd party add-ons like photography.
+        // Let's apply to Base Subtotal for better business logic.
         $discountAmount = 0;
         $discountCodeId = null;
         $discountCode = null;
 
         if (!empty($validated['discount_code'])) {
             $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
-
             if (!$discountCode || !$discountCode->isValid()) {
-                throw ValidationException::withMessages([
-                    'discount_code' => 'This discount code is invalid or has expired.',
-                ]);
+                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
-
-            $discountAmount = $discountCode->calculateDiscount($subtotal);
+            $discountAmount = $discountCode->calculateDiscount($baseSubtotal); // Discount on base price only
             $discountCodeId = $discountCode->id;
         }
 
-        $totalPrice = $subtotal - $discountAmount;
-        $downPayment = $subtotal * 0.5; // DP is 50% of the *original* price
+        // 4. Final Totals
+        $finalSubtotal = $baseSubtotal + $addonsTotal;
+        $totalPrice = $finalSubtotal - $discountAmount;
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
         try {
+            // Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $subtotal,
+                'subtotal' => $finalSubtotal,
                 'discount_amount' => $discountAmount,
                 'total_amount' => $totalPrice,
                 'discount_code_id' => $discountCodeId,
@@ -371,6 +398,7 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
+            // Create Booking
             $booking = $package->bookings()->create([
                 'user_id' => $user->id,
                 'booking_date' => $validated['start_date'],
@@ -380,26 +408,23 @@ class BookingController extends Controller
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
-                    // Guest & Contact Info
                     'full_name' => $validated['full_name'],
                     'email' => $validated['email'],
                     'phone_number' => $validated['phone_number'],
                     'participant_nationality' => $validated['participant_nationality'],
-
-                    // Participant Counts
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
-
-                    // Pickup & Travel Info
                     'pickup_location' => $validated['pickup_location'],
                     'flight_number' => $validated['flight_number'] ?? null,
                     'special_request' => $validated['special_request'] ?? null,
 
-                    // Pricing & Service Snapshot
-                    'service_name' => $package->name, // Store the package name
+                    // Financial Snapshot
+                    'service_name' => $package->name,
                     'price_per_pax' => $pricePerPax,
-                    'original_subtotal' => $subtotal,
+                    'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Save selected addons list
                     'discount_applied' => $discountAmount
                 ]
             ]);
@@ -407,14 +432,27 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
+            // Main Package Item
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
                 'orderable_type' => HolidayPackage::class,
-                'name' => $package->name, // ✅ FIX: Added item name
-                'quantity' => $totalPax,
-                'price' => $pricePerPax,
+                'name' => $package->name . " ($totalPax Pax)",
+                'quantity' => 1, // Treat package group as 1 unit
+                'price' => $baseSubtotal,
             ]);
+
+            // ✅ Save Add-ons as OrderItems (Optional, but good for invoices)
+            foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $package->id, // Linked to package
+                    'orderable_type' => HolidayPackage::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
 
             if ($discountCode) {
                 $discountCode->increment('uses');
@@ -426,8 +464,8 @@ class BookingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Holiday package booking failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['message' => 'Failed to create booking: ' . $e->getMessage()], 500);
+            Log::error('Holiday package booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create booking.'], 500);
         }
     }
 
@@ -442,6 +480,7 @@ class BookingController extends Controller
     {
         $validated = $request->validate([
             'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'activity_time' => 'required|string', // Ensure this is validated
             'quantity' => 'required|integer|min:1',
             'participant_nationality' => 'required|string|max:100',
             'full_name' => 'required|string|max:255',
@@ -449,8 +488,8 @@ class BookingController extends Controller
             'phone_number' => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
-            // ✅ ADDED: Validate activity_time
-            'activity_time' => 'required|date_format:H:i', // e.g., "09:00"
+            'selected_addons' => 'nullable|array', // ✅ Accept array of names
+            'selected_addons.*' => 'string',
         ]);
 
         if ($activity->status !== 'active') {
@@ -459,21 +498,45 @@ class BookingController extends Controller
 
         $user = Auth::user();
         $totalPax = $validated['quantity'];
-        $pricePerPax = $activity->price;
 
-        $subtotal = $pricePerPax * $totalPax;
-        $totalPrice = $subtotal;
+        // 1. Base Price
+        $pricePerPax = $activity->price;
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        // 2. Add-ons Calculation
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($activity->addons)) {
+            $availableAddons = collect($activity->addons);
+
+            foreach ($validated['selected_addons'] as $addonName) {
+                $addon = $availableAddons->firstWhere('name', $addonName);
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = [
+                        'name' => $addonName,
+                        'price' => $price
+                    ];
+                }
+            }
+        }
+
+        // 3. Totals
+        $finalSubtotal = $baseSubtotal + $addonsTotal;
+        $totalPrice = $finalSubtotal; // No discounts implemented for Activities yet
         $downPayment = $totalPrice * 0.5;
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
             DB::beginTransaction();
 
-            // 1. Create Order
+            // Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $subtotal,
+                'subtotal' => $finalSubtotal,
                 'discount_amount' => 0,
                 'total_amount' => $totalPrice,
                 'status' => 'pending',
@@ -481,17 +544,29 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // 2. Create OrderItem
+            // Main Activity Item
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $activity->id,
                 'orderable_type' => Activity::class,
                 'name' => $activity->name,
                 'quantity' => $validated['quantity'],
-                'price' => $pricePerPax,
+                'price' => $pricePerPax, // Unit price
             ]);
 
-            // 3. Create Booking
+             // ✅ Add-ons as OrderItems
+             foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $activity->id,
+                    'orderable_type' => Activity::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
+
+            // Create Booking
             $booking = $activity->bookings()->create([
                 'user_id' => $user->id,
                 'status' => 'pending',
@@ -505,17 +580,17 @@ class BookingController extends Controller
                     'phone_number' => $validated['phone_number'],
                     'participant_nationality' => $validated['participant_nationality'],
                     'quantity' => $validated['quantity'],
+                    'activity_time' => $validated['activity_time'],
                     'pickup_location' => $validated['pickup_location'],
                     'special_request' => $validated['special_request'] ?? null,
-                    // ✅ ADDED: Store activity_time
-                    'activity_time' => $validated['activity_time'],
                     'service_name' => $activity->name,
                     'price_per_person' => $pricePerPax,
-                    'original_subtotal' => $subtotal,
+                    'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Save selected addons
                 ],
             ]);
 
-            // 4. Link Order to Booking
             $order->booking_id = $booking->id;
             $order->save();
 
