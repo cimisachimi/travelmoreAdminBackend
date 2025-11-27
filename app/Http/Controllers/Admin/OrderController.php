@@ -13,22 +13,37 @@ class OrderController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
-    {
-        // Eager load the relationships your Index.jsx file needs
-        $orders = Order::with([
-            'user',
-            'orderItems', // Use 'orderItems' (camelCase)
-            'transaction' // This correctly gets the one with status = 'settlement'
-        ])
-            ->latest()
-            ->paginate(10);
+public function index(Request $request)
+{
+    $query = Order::with(['user', 'orderItems', 'transaction']);
 
-        return Inertia::render('Admin/Order/Index', [
-            'orders' => $orders,
-        ]);
+    // --- 1. Sorting Logic ---
+    if ($request->has('sort') && $request->has('direction')) {
+        $sort = $request->input('sort');
+        $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
+
+        if ($sort === 'user.name') {
+            // Sort by related User name
+            $query->join('users', 'orders.user_id', '=', 'users.id')
+                  ->orderBy('users.name', $direction)
+                  ->select('orders.*'); // Avoid overwriting IDs
+        } else {
+            // Sort by direct Order columns
+            $query->orderBy($sort, $direction);
+        }
+    } else {
+        // Default sort: Date Descending
+        $query->latest();
     }
 
+    $orders = $query->paginate(10)->withQueryString(); // Persist params in pagination links
+
+    return Inertia::render('Admin/Order/Index', [
+        'orders' => $orders,
+        // Pass current sort state back to frontend
+        'filters' => $request->only(['sort', 'direction']),
+    ]);
+}
     /**
      * Show the specified order.
      */
