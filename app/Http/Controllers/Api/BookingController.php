@@ -447,8 +447,10 @@ class BookingController extends Controller
             'full_name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
             'phone_number' => 'required|string|max:20',
-            'pickup_location' => 'required|string|max:255', // e.g., Hotel name
+            'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
+            // ✅ ADDED: Validate activity_time
+            'activity_time' => 'required|date_format:H:i', // e.g., "09:00"
         ]);
 
         if ($activity->status !== 'active') {
@@ -457,11 +459,11 @@ class BookingController extends Controller
 
         $user = Auth::user();
         $totalPax = $validated['quantity'];
-        $pricePerPax = $activity->price; // Use the 'price' attribute
+        $pricePerPax = $activity->price;
 
         $subtotal = $pricePerPax * $totalPax;
-        $totalPrice = $subtotal; // No discounts for activities... yet
-        $downPayment = $totalPrice * 0.5; // 50% DP
+        $totalPrice = $subtotal;
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
@@ -471,8 +473,8 @@ class BookingController extends Controller
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $subtotal, // ✅ FIX: Added subtotal
-                'discount_amount' => 0, // ✅ FIX: Added discount_amount
+                'subtotal' => $subtotal,
+                'discount_amount' => 0,
                 'total_amount' => $totalPrice,
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
@@ -484,7 +486,7 @@ class BookingController extends Controller
                 'order_id' => $order->id,
                 'orderable_id' => $activity->id,
                 'orderable_type' => Activity::class,
-                'name' => $activity->name, // ✅ FIX: Added item name
+                'name' => $activity->name,
                 'quantity' => $validated['quantity'],
                 'price' => $pricePerPax,
             ]);
@@ -498,18 +500,15 @@ class BookingController extends Controller
                 'booking_date' => $validated['booking_date'],
                 'start_date' => $validated['booking_date'],
                 'details' => [
-                    // Guest & Contact Info
                     'full_name' => $validated['full_name'],
                     'email' => $validated['email'],
                     'phone_number' => $validated['phone_number'],
                     'participant_nationality' => $validated['participant_nationality'],
-
-                    // Activity Info
                     'quantity' => $validated['quantity'],
                     'pickup_location' => $validated['pickup_location'],
                     'special_request' => $validated['special_request'] ?? null,
-
-                    // Pricing & Service Snapshot
+                    // ✅ ADDED: Store activity_time
+                    'activity_time' => $validated['activity_time'],
                     'service_name' => $activity->name,
                     'price_per_person' => $pricePerPax,
                     'original_subtotal' => $subtotal,
