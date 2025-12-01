@@ -12,25 +12,21 @@ class Transaction extends Model
 
     /**
      * The attributes that are mass assignable.
-     *
-     * This array is now clean and only contains the columns that
-     * actually exist in your 'transactions' table after the cleanup.
      */
     protected $fillable = [
         'order_id',
-        'transaction_code', // <--- Add this
+        'transaction_code', // Required for Refunds
         'user_id',
         'snap_token',
         'status',
         'gross_amount',
         'payment_type',
         'payment_payloads',
+        'notes',            // ✅ REQUIRED: Fixes the status update issue for Down Payments
     ];
 
     /**
      * A Transaction is always associated with one Order.
-     *
-     * This is the single, correct way to link a transaction to what was purchased.
      */
     public function order(): BelongsTo
     {
