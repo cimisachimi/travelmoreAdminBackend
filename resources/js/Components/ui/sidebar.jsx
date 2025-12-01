@@ -20,7 +20,7 @@ export function useSidebar() {
   return context;
 }
 
-// --- New, simplified trigger button ---
+// --- Trigger button ---
 export function SidebarTrigger({ className, ...props }) {
   const { isCollapsed, setIsCollapsed } = useSidebar();
   return (
@@ -35,7 +35,6 @@ export function SidebarTrigger({ className, ...props }) {
     </Button>
   );
 }
-
 
 export function Sidebar({ className, children }) {
   const { isCollapsed } = useSidebar();
@@ -75,7 +74,18 @@ export function SidebarFooter({ className, children }) {
 }
 
 export function SidebarGroup({ className, children }) {
-  return <div className={cn("flex flex-col gap-2", className)}>{children}</div>;
+  return <div className={cn("flex flex-col gap-2 mb-4", className)}>{children}</div>;
+}
+
+// ✅ ADDED THIS MISSING COMPONENT
+export function SidebarGroupLabel({ className, children }) {
+  const { isCollapsed } = useSidebar();
+  if (isCollapsed) return null; // Hide label when collapsed
+  return (
+    <div className={cn("px-4 text-xs font-semibold text-muted-foreground/70 mb-1", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function SidebarMenu({ className, children }) {

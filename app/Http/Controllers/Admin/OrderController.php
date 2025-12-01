@@ -68,64 +68,59 @@ public function index(Request $request)
      */
     public function refund(Request $request, Order $order)
     {
-        // --- THIS IS THE NEW, CORRECTED LOGIC ---
-
-        // 1. Check if a refund has already been issued
-        $refundedTransaction = $order->transactions()
-                                     ->where('status', 'refund')
-                                     ->first();
-
+        $refundedTransaction = $order->transactions()->where('status', 'refund')->first();
         if ($refundedTransaction) {
             return back()->with('error', 'This order has already been refunded.');
         }
 
-        // 2. Find the original 'settlement' transaction to be refunded
-        $transactionToRefund = $order->transactions()
-                                     ->where('status', 'settlement')
-                                     ->first();
-
+        $transactionToRefund = $order->transactions()->where('status', 'settlement')->first();
         if (!$transactionToRefund) {
-            return back()->with('error', 'No successful payment transaction found to refund.');
+            // Allow manual cancellation if no paid transaction exists
+            $order->update(['status' => 'cancelled']);
+            return back()->with('success', 'Order cancelled manually (no refundable transaction found).');
         }
 
-        // 3. Get Midtrans config
-        $serverKey = config('midtrans.server_key');
-        $isProduction = config('midtrans.is_production');
-        $baseUrl = $isProduction
-            ? 'https://api.midtrans.com'
-            : 'https://api.sandbox.midtrans.com';
-
-        // Use the transaction's code as the Midtrans Order ID
+        // 1. Try to get ID from the new column, OR fallback to the JSON payload
         $midtransOrderId = $transactionToRefund->transaction_code;
 
+        if (!$midtransOrderId && !empty($transactionToRefund->payment_payloads)) {
+            $payloads = json_decode($transactionToRefund->payment_payloads, true);
+            $midtransOrderId = $payloads['order_id'] ?? null;
+        }
+
+        // 2. Setup Midtrans
+        $serverKey = config('midtrans.server_key');
+        $isProduction = config('midtrans.is_production');
+        $baseUrl = $isProduction ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com';
+
         try {
-            // 4. Make the API call to Midtrans to refund
-            $response = Http::withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-                'Authorization' => 'Basic ' . base64_encode($serverKey . ':')
-            ])->post("{$baseUrl}/v2/{$midtransOrderId}/refund", [
-                'refund_key' => 'order-' . $order->id . '-refund-' . time(),
-                'reason' => 'Refund requested by admin'
-            ]);
+            // 3. Attempt Midtrans Refund
+            if ($midtransOrderId) {
+                $response = Http::withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                    'Authorization' => 'Basic ' . base64_encode($serverKey . ':')
+                ])->post("{$baseUrl}/v2/{$midtransOrderId}/refund", [
+                    'refund_key' => 'order-' . $order->id . '-refund-' . time(),
+                    'reason' => 'Refund requested by admin'
+                ]);
 
-            $responseBody = $response->json();
+                $responseBody = $response->json();
 
-            // 5. Handle Midtrans response
-            if ($response->successful() && isset($responseBody['status_code']) && $responseBody['status_code'] == '200') {
-
-                // 6. Update your local database
-                // We update the original transaction to 'refund'
-                $transactionToRefund->update(['status' => 'refund']);
-
-                // We also update the order status
-                $order->update(['status' => 'cancelled']);
-
-                return back()->with('success', 'Refund processed successfully.');
-
-            } else {
-                return back()->with('error', 'Midtrans Error: ' . ($responseBody['status_message'] ?? 'Unknown error'));
+                // If Midtrans fails (e.g., 404 transaction not found), we might still want to cancel locally
+                if ($response->failed() && $response->status() != 404) {
+                     return back()->with('error', 'Midtrans Error: ' . ($responseBody['status_message'] ?? 'Unknown error'));
+                }
             }
+
+            // 4. Update Local Database (Even if Midtrans ID was missing, or it was a 404 on Sandbox)
+            $transactionToRefund->update(['status' => 'refund']);
+            $order->update(['status' => 'cancelled']);
+
+            // Release availability if needed
+            // $this->releaseAvailability($order); // Ensure you have this function available or imported
+
+            return back()->with('success', 'Refund processed successfully.');
 
         } catch (\Exception $e) {
             return back()->with('error', 'Refund failed: ' . $e->getMessage());

@@ -18,6 +18,7 @@ class Transaction extends Model
      */
     protected $fillable = [
         'order_id',
+        'transaction_code', // <--- Add this
         'user_id',
         'snap_token',
         'status',

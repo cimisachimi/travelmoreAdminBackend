@@ -41,7 +41,6 @@ class PaymentController extends Controller
         if ($request->user()->id !== $order->user_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        // ... (other status checks remain the same) ...
 
         $amountToCharge = 0;
         $itemNameSuffix = '';
@@ -59,10 +58,9 @@ class PaymentController extends Controller
         } else { // down_payment
             $amountToCharge = $order->down_payment_amount;
             $itemNameSuffix = '-DP';
-            $transactionNote = 'down_payment'; // This should be saved correctly
+            $transactionNote = 'down_payment';
 
             if (empty($amountToCharge) || $amountToCharge <= 0) {
-                // ... (Fallback logic) ...
                  $amountToCharge = $order->total_amount;
                  $paymentOption = 'full_payment';
                  $transactionNote = 'full_payment';
@@ -76,15 +74,23 @@ class PaymentController extends Controller
 
         try {
             return DB::transaction(function () use ($order, $amountToCharge, $paymentOption, $itemNameSuffix, $transactionNote) {
+                // 1. Create the Transaction first
                 $transaction = Transaction::create([
                     'order_id' => $order->id,
                     'user_id' => $order->user_id,
                     'status' => 'pending',
                     'gross_amount' => $amountToCharge,
-                    'notes' => $transactionNote, // Save the note
+                    'notes' => $transactionNote,
                 ]);
 
-                // ... (Item details mapping logic) ...
+                // 2. Generate the unique Midtrans Order ID
+                // We use the Transaction ID to ensure uniqueness and match the webhook logic
+                $midtransOrderId = 'TRX-' . $transaction->id . '-' . time();
+
+                // 3. IMPORTANT: Save this code to the database immediately
+                $transaction->update(['transaction_code' => $midtransOrderId]);
+
+                // 4. Prepare Items
                  $item_details = $order->orderItems->map(function ($item) use ($amountToCharge, $paymentOption, $itemNameSuffix, $order) {
                     $itemName = 'Unknown Item';
                     if ($item->orderable instanceof CarRental) {
@@ -101,19 +107,18 @@ class PaymentController extends Controller
                     }
 
                     return [
-                        'id' => class_basename($item->orderable_type) . '-' . $item->orderable_id . $itemNameSuffix, // Use class_basename for shorter ID
+                        'id' => class_basename($item->orderable_type) . '-' . $item->orderable_id . $itemNameSuffix,
                         'price' => (int) $amountToCharge,
                         'quantity' => 1,
                         'name' => substr($displayName, 0, 50),
                     ];
                  })->toArray();
 
-
                 if (empty($item_details)) {
                      throw new \Exception('Cannot create payment with no items.');
                 }
 
-                // ... (Expiry calculation logic) ...
+                // 5. Calculate Expiry
                 $now = Carbon::now();
                 $orderDeadline = $order->payment_deadline;
                 $midtransExpiryTime = $now->copy()->addHours(2);
@@ -124,14 +129,17 @@ class PaymentController extends Controller
                 }
                 $duration = (int) $now->diffInMinutes($midtransExpiryTime);
 
-
+                // 6. Request Snap Token using the SAVED $midtransOrderId
                 $params = [
                     'transaction_details' => [
-                        'order_id' => 'TRX-' . $transaction->id . '-' . time(),
+                        'order_id' => $midtransOrderId, // <--- Using the saved ID
                         'gross_amount' => (int) $transaction->gross_amount,
                     ],
                     'item_details' => $item_details,
-                    'customer_details' => [ /* ... */ ],
+                    'customer_details' => [
+                        'first_name' => $order->user->name,
+                        'email' => $order->user->email,
+                    ],
                     'expiry' => [
                          'start_time' => $now->format('Y-m-d H:i:s O'),
                          'unit' => 'minute',
@@ -167,6 +175,7 @@ class PaymentController extends Controller
             $midtransOrderId = $notification->order_id;
 
             // Extract transaction ID
+            // Format is TRX-{TransactionID}-{Timestamp}
             $orderIdParts = explode('-', $midtransOrderId);
             if (count($orderIdParts) < 2 || $orderIdParts[0] !== 'TRX') {
                 Log::warning('Midtrans webhook: Invalid order_id format.', ['order_id' => $midtransOrderId]);
@@ -174,20 +183,22 @@ class PaymentController extends Controller
             }
             $transactionId = $orderIdParts[1];
 
-            // Use findOrFail to ensure transaction exists or throw an error
+            // Use findOrFail to ensure transaction exists
             $transaction = Transaction::findOrFail($transactionId);
+
+            // Optional: Verify that the transaction_code matches if you want extra security
+            // if ($transaction->transaction_code !== $midtransOrderId) { ... }
 
             $transaction->load('order.booking.bookable');
             $order = $transaction->order;
-            // Use findOrFail earlier, but double-check association
+
             if (!$order) {
                 Log::error('Midtrans webhook: Order not found for transaction.', ['transaction_id' => $transactionId]);
-                // Still return 200 to Midtrans to avoid retries, but log the error.
                 return response()->json(['message' => 'Order association missing'], 200);
             }
 
             // Prevent re-processing an already settled/failed transaction
-            if (in_array($transaction->status, ['settlement', 'failed', 'expire'])) {
+            if (in_array($transaction->status, ['settlement', 'failed', 'expire', 'refund'])) {
                 Log::info('Midtrans webhook: Transaction already processed.', [
                     'transaction_id' => $transactionId,
                     'status' => $transaction->status
@@ -201,90 +212,55 @@ class PaymentController extends Controller
                 $transaction->payment_type = $notification->payment_type;
                 $transaction->payment_payloads = json_encode($notification->getResponse());
 
-                // Determine the correct final statuses, default to current
+                // Determine the correct final statuses
                 $finalTransactionStatus = $transaction->status;
                 $finalOrderStatus = $order->status;
-                $finalBookingStatus = optional($order->booking)->status; // Use optional() helper
-                $finalBookingPaymentStatus = optional($order->booking)->payment_status; // Use optional() helper
+                $finalBookingStatus = optional($order->booking)->status;
+                $finalBookingPaymentStatus = optional($order->booking)->payment_status;
 
-                // --- DETAILED DEBUGGING BLOCK ---
                 $currentTransactionNotes = $transaction->notes;
-                $currentOrderSatus = $order->status;
-                $noteType = gettype($currentTransactionNotes);
-                $expectedNote = 'down_payment';
-                $trimmedNote = trim($currentTransactionNotes ?? '');
-                $areNotesEqual = ($trimmedNote === $expectedNote);
-
-                Log::debug("[Txn ID: {$transaction->id}] --- DEBUG START ---");
-                Log::debug("[Txn ID: {$transaction->id}] Raw Notes: ", [$currentTransactionNotes]); // Log raw value maybe it's not string
-                Log::debug("[Txn ID: {$transaction->id}] Type of Notes: {$noteType}");
-                Log::debug("[Txn ID: {$transaction->id}] Trimmed Notes: '{$trimmedNote}'");
-                Log::debug("[Txn ID: {$transaction->id}] Expected Note: '{$expectedNote}'");
-                Log::debug("[Txn ID: {$transaction->id}] Are Notes Equal (trimmed === 'down_payment')? " . ($areNotesEqual ? 'YES' : 'NO'));
-                Log::debug("[Txn ID: {$transaction->id}] Current Order Status: '{$currentOrderSatus}'");
-                Log::debug("[Txn ID: {$transaction->id}] --- DEBUG END ---");
-                // --- END DETAILED DEBUGGING BLOCK ---
-
+                $areNotesEqual = (trim($currentTransactionNotes ?? '') === 'down_payment');
 
                 // ✅ SUCCESSFUL PAYMENT
                 if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $fraudStatus == 'accept')) {
 
                     $finalTransactionStatus = 'settlement';
-                    $isDownPayment = $areNotesEqual; // Use the result from debug block
+                    $isDownPayment = $areNotesEqual;
 
-                    Log::info("[Txn ID: {$transaction->id}] Processing successful payment based on debug check. Is Down Payment? " . ($isDownPayment ? 'YES' : 'NO'));
-
-                    // Condition 1: It IS a down payment AND the order isn't already partially paid
                     if ($isDownPayment && $finalOrderStatus !== 'partially_paid') {
                         $finalOrderStatus = 'partially_paid';
                         if ($order->booking) {
                             $finalBookingStatus = 'confirmed';
                             $finalBookingPaymentStatus = 'partial';
                         }
-                        Log::info("[Txn ID: {$transaction->id}] Order ID {$order->id} status WILL BE updated to partially_paid.");
                     }
-                    // Condition 2: It's NOT a down payment AND the order isn't already paid
                     else if (!$isDownPayment && $finalOrderStatus !== 'paid') {
                         $finalOrderStatus = 'paid';
                         if ($order->booking) {
                             $finalBookingStatus = 'confirmed';
                             $finalBookingPaymentStatus = 'paid';
                         }
-                        Log::info("[Txn ID: {$transaction->id}] Order ID {$order->id} status WILL BE updated to paid.");
-                    }
-                    // Condition 3: Status doesn't need changing (already correct or duplicate notification)
-                    else {
-                         Log::info("[Txn ID: {$transaction->id}] Order ID {$order->id} status ('{$finalOrderStatus}') requires no change for this payment type.");
                     }
 
                 // PENDING PAYMENT
                 } else if ($transactionStatus == 'pending') {
                     $finalTransactionStatus = 'pending';
-                    if ($finalOrderStatus === 'pending') { // Only from initial pending state
+                    if ($finalOrderStatus === 'pending') {
                         $finalOrderStatus = 'processing';
                     }
-                    Log::info("[Txn ID: {$transaction->id}] Payment is pending.");
 
                 // FAILED/EXPIRED/DENIED PAYMENT
                 } else if (in_array($transactionStatus, ['deny', 'cancel', 'expire', 'failure'])) {
                     $finalTransactionStatus = 'failed';
-                    // Only fail the order if no payment (down payment or full) was successful before
                     if ($finalOrderStatus !== 'partially_paid' && $finalOrderStatus !== 'paid') {
                         $finalOrderStatus = 'failed';
                         if ($order->booking) {
                             $finalBookingStatus = 'cancelled';
                             $finalBookingPaymentStatus = 'unpaid';
                         }
-                        Log::info("[Txn ID: {$transaction->id}] Payment failed/expired for Order ID {$order->id}. Releasing availability.");
                         $this->releaseAvailability($order);
-                    } else {
-                        // e.g., Balance payment failed, but DP was successful. Keep order status.
-                        Log::warning("[Txn ID: {$transaction->id}] Failed payment for Order ID {$order->id}, but order status is '{$finalOrderStatus}'. No status change.");
                     }
-
-                // UNHANDLED STATUS
                 } else {
-                     Log::warning("[Txn ID: {$transaction->id}] Unhandled Midtrans status: '{$transactionStatus}'. Keeping transaction as pending.");
                      $finalTransactionStatus = 'pending';
                 }
 
@@ -292,7 +268,6 @@ class PaymentController extends Controller
                 $transaction->status = $finalTransactionStatus;
                 $order->status = $finalOrderStatus;
                 if ($order->booking) {
-                    // Only update booking if status changed
                     if ($finalBookingStatus !== $order->booking->status) {
                          $order->booking->status = $finalBookingStatus;
                     }
@@ -301,14 +276,12 @@ class PaymentController extends Controller
                     }
                 }
 
-                // Save changes
                 $transaction->save();
                 $order->save();
-                if ($order->booking && $order->booking->isDirty()) { // Save booking only if it changed
+                if ($order->booking && $order->booking->isDirty()) {
                     $order->booking->save();
                 }
-
-            }); // End DB Transaction
+            });
 
             Log::info('Midtrans notification handled successfully for Transaction ID: ' . $transaction->id);
             return response()->json(['message' => 'Notification handled successfully.'], 200);
@@ -316,13 +289,12 @@ class PaymentController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
              Log::error('Midtrans webhook: Transaction not found via findOrFail.', ['transaction_id' => $transactionId ?? null]);
              return response()->json(['message' => 'Transaction not found.'], 404);
-        } catch (\Exception $e) { // Catch standard exceptions during handling
+        } catch (\Exception $e) {
             Log::error('Midtrans notification handler failed.', [
                 'error_message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'request_content' => $request->getContent()
             ]);
-            // Return 500 so Midtrans might retry
             return response()->json(['message' => 'An internal error occurred.'], 500);
         }
     }
@@ -336,18 +308,12 @@ class PaymentController extends Controller
 
             if ($startDate && $endDate) {
                 try {
-                    $affectedRows = CarRentalAvailability::where('car_rental_id', $carRental->id)
+                    CarRentalAvailability::where('car_rental_id', $carRental->id)
                         ->whereBetween('date', [$startDate, $endDate])
-                        ->where('status', 'booked') 
+                        ->where('status', 'booked')
                         ->update(['status' => 'available']);
-                        
-                    Log::info('Released availability for CarRental ID: ' . $carRental->id . ' from ' . $startDate . ' to ' . $endDate . '. Rows affected: ' . $affectedRows);
                 } catch (\Exception $e) {
-                    Log::error('Failed to release availability for CarRental ID: ' . $carRental->id, [
-                        'error' => $e->getMessage(),
-                        'start_date' => $startDate,
-                        'end_date' => $endDate,
-                    ]);
+                    Log::error('Failed to release availability', ['error' => $e->getMessage()]);
                 }
             }
         }
