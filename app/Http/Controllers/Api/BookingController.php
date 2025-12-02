@@ -20,7 +20,7 @@ use App\Models\HolidayPackage;
 use App\Models\DiscountCode;
 use Illuminate\Validation\ValidationException;
 use App\Models\Setting; // <-- ADD THIS LINE
-
+use App\Models\OpenTrip;
 class BookingController extends Controller
 {
     /**

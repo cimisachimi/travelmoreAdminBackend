@@ -99,13 +99,16 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('posts', AdminPostController::class)->names('posts');
 
-        // --- Open Trips ---
-    Route::post('/open-trips/{openTrip}/images', [AdminOpenTripController::class, 'storeImage'])->name('open-trips.images.store');
-    Route::delete('/open-trips/{openTrip}/images/{image}', [AdminOpenTripController::class, 'destroyImage'])->name('open-trips.images.destroy');
-    Route::post('/open-trips/{openTrip}/thumbnail', [AdminOpenTripController::class, 'updateThumbnail'])->name('open-trips.thumbnail.update');
-    Route::resource('open-trips', AdminOpenTripController::class)->names('open-trips');
+    // --- OPEN TRIPS (Corrected to use AdminOpenTripController) ---
 
-        // ✅ ADD THESE TWO NEW ROUTES (e.g., at the end of the group)
+        // Image handlers
+        Route::post('/open-trips/{openTrip}/images', [AdminOpenTripController::class, 'uploadImage'])->name('open-trips.images.store');
+        Route::delete('/open-trips/{openTrip}/images/{image}', [AdminOpenTripController::class, 'deleteImage'])->name('open-trips.images.destroy');
+        Route::post('/open-trips/{openTrip}/thumbnail', [AdminOpenTripController::class, 'updateThumbnail'])->name('open-trips.thumbnail.update');
+
+        // Resource routes
+        // This registers: admin.open-trips.index, admin.open-trips.create, etc.
+        Route::resource('open-trips', AdminOpenTripController::class);
     });
 });
 

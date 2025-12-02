@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react'; // 1. Added usePage
 import {
   Home,
   Package,
@@ -19,7 +19,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel, // Added this import
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -30,16 +30,16 @@ import {
 // 1. Dashboard (Single Item)
 const dashboardItem = { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home };
 
-// 2. Services Group (The 4 requested items)
+// 2. Services Group
 const serviceItems = [
   { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
   { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
   { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
   { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
-  { name: 'admin.open-trips.index', title: "Activities", url: route('admin.open-trips.index'), icon: Activity },
+  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Activity },
 ];
 
-// 3. Management Group (The rest)
+// 3. Management Group
 const managementItems = [
   { name: 'admin.orders.index', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
   { name: 'admin.discount-codes.index', title: "Discount Codes", url: route('admin.discount-codes.index'), icon: TicketPercent },
@@ -51,6 +51,13 @@ const managementItems = [
 export function AppSidebar({ user }) {
   const { isCollapsed } = useSidebar();
 
+  // 2. Get auth user directly from Inertia global props
+  const { auth } = usePage().props;
+
+  // 3. Use the prop if available, otherwise fall back to the global auth user
+  // This safeguards against the "undefined" error if a page forgets to pass the user prop.
+  const currentUser = user || auth.user || { name: 'User', email: '' };
+
   // Helper to render a list of menu items
   const renderMenuItems = (items) => (
     items.map((item) => (
@@ -58,7 +65,7 @@ export function AppSidebar({ user }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Link href={item.url}>
-              <SidebarMenuButton active={route().current(item.name)}>
+              <SidebarMenuButton isActive={route().current(item.name)}>
                 <item.icon className="h-5 w-5" />
                 {!isCollapsed && <span>{item.title}</span>}
               </SidebarMenuButton>
@@ -82,7 +89,7 @@ export function AppSidebar({ user }) {
       <SidebarContent>
         <TooltipProvider delayDuration={0}>
 
-          {/* Group 1: Dashboard (No Label needed usually, or "Platform") */}
+          {/* Group 1: Dashboard */}
           <SidebarGroup>
             <SidebarMenu>
                 {renderMenuItems([dashboardItem])}
@@ -113,8 +120,9 @@ export function AppSidebar({ user }) {
             <UserIcon className="h-6 w-6" />
             {!isCollapsed && (
             <div className="flex flex-col text-left ml-2 overflow-hidden">
-                <span className="text-sm font-semibold truncate">{user.name}</span>
-                <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+                {/* 4. Use currentUser here */}
+                <span className="text-sm font-semibold truncate">{currentUser.name}</span>
+                <span className="text-xs text-muted-foreground truncate">{currentUser.email}</span>
             </div>
             )}
         </div>

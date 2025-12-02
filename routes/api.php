@@ -39,8 +39,8 @@ Route::post('/login', [LoginController::class, 'login']);
 Route::get('/public/packages', [HolidayPackageController::class, 'index']);
 Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
 
-Route::get('/public/open-trips', [OpenTripController::class, 'index']);
-Route::get('/public/open-trips/{id}', [OpenTripController::class, 'show']);
+Route::get('/open-trips', [OpenTripController::class, 'index']);
+Route::get('/open-trips/{id}', [OpenTripController::class, 'show']);
 
 Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
 Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
