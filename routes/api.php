@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
 use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
 use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
+use App\Http\Controllers\Api\Public\OpenTripController; // Import Controller
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -37,6 +38,9 @@ Route::post('/login', [LoginController::class, 'login']);
 // ✅ TAMBAHKAN/UBAH: Rute untuk Holiday Packages
 Route::get('/public/packages', [HolidayPackageController::class, 'index']);
 Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
+
+Route::get('/public/open-trips', [OpenTripController::class, 'index']);
+Route::get('/public/open-trips/{id}', [OpenTripController::class, 'show']);
 
 Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
 Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
@@ -93,6 +97,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
     Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']); // Keep specific booking route
 
+    Route::post('/open-trips/{id}/book', [BookingController::class, 'storeOpenTripBooking']);
 
     Route::post('/packages/{packageId}/book', [BookingController::class, 'storeHolidayPackageBooking']);
     // --- Car Rentals ---

@@ -15,6 +15,8 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeController;
 use App\Http\Controllers\Admin\PostController as AdminPostController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController; // ✅ ADD THIS
+use App\Http\Controllers\Admin\OpenTripController as AdminOpenTripController; // ✅ Add this
+
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -96,6 +98,12 @@ Route::middleware('auth')->group(function () {
 
 
         Route::resource('posts', AdminPostController::class)->names('posts');
+
+        // --- Open Trips ---
+    Route::post('/open-trips/{openTrip}/images', [AdminOpenTripController::class, 'storeImage'])->name('open-trips.images.store');
+    Route::delete('/open-trips/{openTrip}/images/{image}', [AdminOpenTripController::class, 'destroyImage'])->name('open-trips.images.destroy');
+    Route::post('/open-trips/{openTrip}/thumbnail', [AdminOpenTripController::class, 'updateThumbnail'])->name('open-trips.thumbnail.update');
+    Route::resource('open-trips', AdminOpenTripController::class)->names('open-trips');
 
         // ✅ ADD THESE TWO NEW ROUTES (e.g., at the end of the group)
     });

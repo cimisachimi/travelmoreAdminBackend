@@ -36,6 +36,7 @@ const serviceItems = [
   { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
   { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
   { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
+  { name: 'admin.open-trips.index', title: "Activities", url: route('admin.open-trips.index'), icon: Activity },
 ];
 
 // 3. Management Group (The rest)

@@ -608,4 +608,131 @@ class BookingController extends Controller
             return response()->json(['message' => 'Booking failed.'], 500);
         }
     }
+    public function storeOpenTripBooking(Request $request, $openTripId)
+    {
+        // 1. Validation
+        $validated = $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'adults' => 'required|integer|min:1',
+            'children' => 'sometimes|integer|min:0',
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255', // Stores Meeting Point
+            'special_request' => 'nullable|string',
+        ]);
+
+        $user = Auth::user();
+        $trip = \App\Models\OpenTrip::findOrFail($openTripId);
+
+        $adultsCount = $validated['adults'];
+        $childrenCount = $validated['children'] ?? 0;
+        $totalPax = $adultsCount + $childrenCount;
+
+        // 2. Pricing Logic
+        // For now, we use the 'starting_from_price' as the base price per person.
+        // You can enhance this later to use specific tiers from $trip->price_tiers if needed.
+        $pricePerPax = $trip->starting_from_price;
+
+        if (!$pricePerPax || $pricePerPax <= 0) {
+             return response()->json(['message' => 'Price information is missing for this trip.'], 400);
+        }
+
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        // 3. Discount Logic
+        $discountAmount = 0;
+        $discountCodeId = null;
+        $discountCode = null;
+
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+            if (!$discountCode || !$discountCode->isValid()) {
+                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
+            }
+            $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
+            $discountCodeId = $discountCode->id;
+        }
+
+        // 4. Totals
+        $finalSubtotal = $baseSubtotal; // Add-ons can be added here if supported in future
+        $totalPrice = $finalSubtotal - $discountAmount;
+        $downPayment = $totalPrice * 0.5; // 50% Down Payment
+        $paymentDeadline = now()->addHours(2);
+
+        DB::beginTransaction();
+        try {
+            // A. Create Order
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-OT-' . strtoupper(Str::random(6)) . time(),
+                'subtotal' => $finalSubtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
+            ]);
+
+            // B. Create Booking
+            $booking = $trip->bookings()->create([
+                'user_id' => $user->id,
+                'booking_date' => $validated['start_date'],
+                'start_date' => $validated['start_date'],
+                // End date calculated based on duration
+                'end_date' => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(),
+                'status' => 'pending',
+                'total_price' => $totalPrice,
+                'payment_status' => 'unpaid',
+                'details' => [
+                    // User Info
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+                    'adults' => $adultsCount,
+                    'children' => $childrenCount,
+                    'total_pax' => $totalPax,
+                    'pickup_location' => $validated['pickup_location'], // Meeting Point
+                    'special_request' => $validated['special_request'] ?? null,
+
+                    // Financial Snapshot
+                    'service_name' => $trip->name,
+                    'price_per_pax' => $pricePerPax,
+                    'base_subtotal' => $baseSubtotal,
+                    'discount_applied' => $discountAmount
+                ]
+            ]);
+
+            // Link Order to Booking
+            $order->booking_id = $booking->id;
+            $order->save();
+
+            // C. Create Order Item
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $trip->id,
+                'orderable_type' => \App\Models\OpenTrip::class,
+                'name' => $trip->name . " ($totalPax Pax)",
+                'quantity' => 1,
+                'price' => $baseSubtotal,
+            ]);
+
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
+
+            DB::commit();
+
+            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Open Trip booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create booking.'], 500);
+        }
+    }
 }
