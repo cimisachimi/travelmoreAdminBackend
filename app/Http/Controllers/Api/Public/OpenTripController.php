@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\Public;
 use App\Http\Controllers\Controller;
 use App\Models\OpenTrip;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class OpenTripController extends Controller
 {
@@ -13,53 +12,14 @@ class OpenTripController extends Controller
     {
         $limit = $request->query('limit', 10);
 
+        // Eager load images to prevent N+1 queries
         $trips = OpenTrip::with('images')
             ->latest()
             ->paginate($limit);
 
-        // Transform the data to match Frontend 'OpenTripListItem' interface
+        // Transform the data
         $formatted = $trips->through(function ($trip) {
-
-            // 1. Get Thumbnail (Image with type 'thumbnail' or the first image)
-            $thumbObj = $trip->images->where('type', 'thumbnail')->first() ?? $trip->images->first();
-            $thumbnailUrl = $thumbObj ? Storage::url($thumbObj->path) : null;
-
-            // 2. Get All Images URL List
-            $imagesList = $trip->images->map(fn($img) => Storage::url($img->path))->toArray();
-
-            // 3. Parse JSON fields (they might be strings or arrays depending on casting)
-            $cost = is_string($trip->cost) ? json_decode($trip->cost, true) : $trip->cost;
-            $itinerary = is_string($trip->itinerary) ? json_decode($trip->itinerary, true) : $trip->itinerary;
-            $meetingPoints = is_string($trip->meeting_points) ? json_decode($trip->meeting_points, true) : $trip->meeting_points;
-            $priceTiers = is_string($trip->price_tiers) ? json_decode($trip->price_tiers, true) : $trip->price_tiers;
-
-            // 4. Calculate "Starting From" Price (Lowest in tiers)
-            $startingPrice = collect($priceTiers)->min('price') ?? 0;
-
-            return [
-                'id' => $trip->id,
-                'name' => $trip->name, // Should be translatable if using spatie-translatable
-                'location' => $trip->location,
-                'duration' => $trip->duration,
-                'rating' => $trip->rating,
-                'category' => $trip->category,
-                'description' => $trip->description,
-
-                // URLs
-                'thumbnail_url' => $thumbnailUrl,
-                'images' => $imagesList,
-                'map_url' => $trip->map_url,
-
-                // Pricing
-                'starting_from_price' => $startingPrice,
-                'price_tiers' => $priceTiers ?? [],
-
-                // Details
-                'meeting_points' => $meetingPoints ?? [],
-                'itinerary_details' => $itinerary ?? [],
-                'includes' => $cost['included'] ?? [],
-                'excludes' => $cost['excluded'] ?? [],
-            ];
+            return $this->formatTrip($trip);
         });
 
         return response()->json($formatted);
@@ -69,25 +29,24 @@ class OpenTripController extends Controller
     {
         $trip = OpenTrip::with('images')->findOrFail($id);
 
-        // --- Same Formatting Logic as Index ---
+        return response()->json($this->formatTrip($trip));
+    }
 
-        // 1. Get Thumbnail
-        $thumbObj = $trip->images->where('type', 'thumbnail')->first() ?? $trip->images->first();
-        $thumbnailUrl = $thumbObj ? Storage::url($thumbObj->path) : null;
-
-        // 2. Get All Images URL List (Fixes the frontend error)
-        $imagesList = $trip->images->map(fn($img) => Storage::url($img->path))->toArray();
-
-        // 3. Parse JSON fields
+    /**
+     * Reusable formatter to ensure consistency between index and show
+     */
+    private function formatTrip($trip)
+    {
+        // 1. Parse JSON fields safely
         $cost = is_string($trip->cost) ? json_decode($trip->cost, true) : $trip->cost;
         $itinerary = is_string($trip->itinerary) ? json_decode($trip->itinerary, true) : $trip->itinerary;
         $meetingPoints = is_string($trip->meeting_points) ? json_decode($trip->meeting_points, true) : $trip->meeting_points;
         $priceTiers = is_string($trip->price_tiers) ? json_decode($trip->price_tiers, true) : $trip->price_tiers;
 
-        // 4. Calculate "Starting From" Price
+        // 2. Calculate "Starting From" Price
         $startingPrice = collect($priceTiers)->min('price') ?? 0;
 
-        $data = [
+        return [
             'id' => $trip->id,
             'name' => $trip->name,
             'location' => $trip->location,
@@ -96,9 +55,11 @@ class OpenTripController extends Controller
             'category' => $trip->category,
             'description' => $trip->description,
 
-            // URLs
-            'thumbnail_url' => $thumbnailUrl,
-            'images' => $imagesList, // ✅ Now returns ['url1', 'url2'] instead of [{id:1...}, {id:2...}]
+            // ✅ FIX: Use the model accessors (getThumbnailUrlAttribute & getImagesUrlAttribute)
+            // This relies on Image::getFullUrlAttribute() which handles the storage disk logic
+            'thumbnail_url' => $trip->thumbnail_url,
+            'images' => $trip->images_url, // Returns array of strings ['http...', 'http...']
+
             'map_url' => $trip->map_url,
 
             // Pricing
@@ -111,7 +72,5 @@ class OpenTripController extends Controller
             'includes' => $cost['included'] ?? [],
             'excludes' => $cost['excluded'] ?? [],
         ];
-
-        return response()->json($data);
     }
 }
