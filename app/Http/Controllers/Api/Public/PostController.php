@@ -65,22 +65,28 @@ class PostController extends Controller
     /**
      * Helper function to format post data.
      */
-    private function formatPost($post)
-    {
-        // Now, $post->title, $post->slug, etc. will all correctly
-        // pull the translation for the locale we just set.
-        return [
-            'id' => $post->id,
-            'slug' => $post->slug,
-            'title' => $post->title,
-            'content' => $post->content,
-            'excerpt' => $post->excerpt,
-            'status' => $post->status,
-            'published_at' => $post->published_at ? $post->published_at->format('Y-m-d') : null,
-            'author' => $post->author ? $post->author->name : 'Unknown',
-            'images' => $post->images->map(function ($image) {
-                return Storage::url($image->url);
-            }),
-        ];
-    }
+    // In app/Http/Controllers/Api/Public/PostController.php
+
+private function formatPost($post)
+{
+    return [
+        'id' => $post->id,
+        'slug' => $post->slug,
+        'title' => $post->title,
+        'content' => $post->content,
+        'excerpt' => $post->excerpt,
+        'status' => $post->status,
+        'published_at' => $post->published_at ? $post->published_at->format('Y-m-d') : null,
+        'author' => $post->author ? $post->author->name : 'Unknown',
+
+        // 👇 UPDATE THIS SECTION
+        'images' => $post->images->map(function ($image) {
+            // Option A: Ensure it uses the public disk config (requires correct APP_URL in .env)
+            return Storage::disk('public')->url($image->url);
+
+            // Option B (Safer fallback): Use the asset helper to force the current domain
+            // return asset('storage/' . $image->url);
+        }),
+    ];
+}
 }
