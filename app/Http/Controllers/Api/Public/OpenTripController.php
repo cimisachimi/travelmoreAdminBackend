@@ -69,8 +69,49 @@ class OpenTripController extends Controller
     {
         $trip = OpenTrip::with('images')->findOrFail($id);
 
-        // Use the same formatting logic as index, or extract to a private method
-        // For brevity, we return the raw object here, but ideally you use the same transformation above.
-        return response()->json($trip);
+        // --- Same Formatting Logic as Index ---
+
+        // 1. Get Thumbnail
+        $thumbObj = $trip->images->where('type', 'thumbnail')->first() ?? $trip->images->first();
+        $thumbnailUrl = $thumbObj ? Storage::url($thumbObj->path) : null;
+
+        // 2. Get All Images URL List (Fixes the frontend error)
+        $imagesList = $trip->images->map(fn($img) => Storage::url($img->path))->toArray();
+
+        // 3. Parse JSON fields
+        $cost = is_string($trip->cost) ? json_decode($trip->cost, true) : $trip->cost;
+        $itinerary = is_string($trip->itinerary) ? json_decode($trip->itinerary, true) : $trip->itinerary;
+        $meetingPoints = is_string($trip->meeting_points) ? json_decode($trip->meeting_points, true) : $trip->meeting_points;
+        $priceTiers = is_string($trip->price_tiers) ? json_decode($trip->price_tiers, true) : $trip->price_tiers;
+
+        // 4. Calculate "Starting From" Price
+        $startingPrice = collect($priceTiers)->min('price') ?? 0;
+
+        $data = [
+            'id' => $trip->id,
+            'name' => $trip->name,
+            'location' => $trip->location,
+            'duration' => $trip->duration,
+            'rating' => $trip->rating,
+            'category' => $trip->category,
+            'description' => $trip->description,
+
+            // URLs
+            'thumbnail_url' => $thumbnailUrl,
+            'images' => $imagesList, // ✅ Now returns ['url1', 'url2'] instead of [{id:1...}, {id:2...}]
+            'map_url' => $trip->map_url,
+
+            // Pricing
+            'starting_from_price' => $startingPrice,
+            'price_tiers' => $priceTiers ?? [],
+
+            // Details
+            'meeting_points' => $meetingPoints ?? [],
+            'itinerary_details' => $itinerary ?? [],
+            'includes' => $cost['included'] ?? [],
+            'excludes' => $cost['excluded'] ?? [],
+        ];
+
+        return response()->json($data);
     }
 }
