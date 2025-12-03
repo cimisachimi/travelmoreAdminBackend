@@ -15,7 +15,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
 use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
 use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
-//use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
+use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
 use App\Http\Controllers\Api\SocialiteController; // Add this import
 use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
 use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
@@ -114,6 +114,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Payment ---
     Route::post('/payment/create-transaction', [PaymentController::class, 'createTransaction']);
     // Removed /orders/{order}/pay and /payment/token as they are covered by create-transaction
+    // REFUNDS
+    Route::get('/my-refunds', [RefundController::class, 'index']);
+    Route::post('/my-refunds', [RefundController::class, 'store']); // Add this line
 
 });
 

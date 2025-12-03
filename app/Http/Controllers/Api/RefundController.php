@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-// Note: You will need to create a 'Refund' model later
-// use App\Models\Refund;
+use App\Models\Refund;
+use App\Models\Order;
 
 class RefundController extends Controller
 {
@@ -15,31 +15,54 @@ class RefundController extends Controller
      */
     public function index(Request $request)
     {
-        $user = Auth::user();
+        $refunds = Refund::where('user_id', Auth::id())
+            ->with('order') // Load the related order
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-        // --- TODO: When you build the Refund model ---
-        // $refunds = $user->refunds()
-        //     ->orderBy('created_at', 'desc')
-        //     ->get();
-        // return response()->json($refunds);
-        // ---------------------------------------------
-
-        // For now, return an empty array.
-        // This stops the 404 error and lets your frontend load.
-        return response()->json([]);
+        return response()->json($refunds);
     }
 
     /**
-     * Store a new refund request (coming soon).
+     * Store a new refund request.
      */
     public function store(Request $request)
     {
-        // --- TODO: Add logic to create a refund request ---
-        // 1. Validate the request (e.g., order_id, reason)
-        // 2. Check if the user is allowed to refund this order
-        // 3. Create the Refund record
-        // 4. Return the new refund
+        // 1. Validate
+        $validated = $request->validate([
+            'order_id' => 'required|exists:orders,id',
+            'reason'   => 'required|string|min:10',
+        ]);
 
-        return response()->json(['message' => 'Feature not yet implemented.'], 501);
+        // 2. Find Order & Verify Ownership
+        $order = Order::where('id', $validated['order_id'])
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (!$order) {
+            return response()->json(['message' => 'Order not found or access denied.'], 404);
+        }
+
+        // 3. Check for duplicates
+        $existingRefund = Refund::where('order_id', $order->id)
+            ->whereIn('status', ['pending', 'approved'])
+            ->first();
+
+        if ($existingRefund) {
+            return response()->json(['message' => 'A refund request is already active for this order.'], 409);
+        }
+
+        // 4. Create Refund
+        $refund = Refund::create([
+            'user_id'  => Auth::id(),
+            'order_id' => $order->id,
+            'reason'   => $validated['reason'],
+            'status'   => 'pending',
+        ]);
+
+        return response()->json([
+            'message' => 'Refund request submitted successfully.',
+            'refund' => $refund
+        ], 201);
     }
 }

@@ -16,7 +16,7 @@ use App\Http\Controllers\Admin\DiscountCodeController as AdminDiscountCodeContro
 use App\Http\Controllers\Admin\PostController as AdminPostController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController; // ✅ ADD THIS
 use App\Http\Controllers\Admin\OpenTripController as AdminOpenTripController; // ✅ Add this
-
+use App\Http\Controllers\Admin\RefundController;
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -103,13 +103,17 @@ Route::middleware('auth')->group(function () {
 
         // Image handlers
         // ✅ CORRECT
-Route::post('/open-trips/{openTrip}/images', [AdminOpenTripController::class, 'storeImage'])->name('open-trips.images.store');
-Route::delete('/open-trips/{openTrip}/images/{image}', [AdminOpenTripController::class, 'destroyImage'])->name('open-trips.images.destroy');
+        Route::post('/open-trips/{openTrip}/images', [AdminOpenTripController::class, 'storeImage'])->name('open-trips.images.store');
+        Route::delete('/open-trips/{openTrip}/images/{image}', [AdminOpenTripController::class, 'destroyImage'])->name('open-trips.images.destroy');
         Route::post('/open-trips/{openTrip}/thumbnail', [AdminOpenTripController::class, 'updateThumbnail'])->name('open-trips.thumbnail.update');
 
         // Resource routes
         // This registers: admin.open-trips.index, admin.open-trips.create, etc.
         Route::resource('open-trips', AdminOpenTripController::class);
+
+
+        Route::get('/refunds', [RefundController::class, 'index'])->name('refunds.index');
+        Route::put('/refunds/{refund}', [RefundController::class, 'update'])->name('refunds.update');
     });
 });
 

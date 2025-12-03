@@ -76,4 +76,9 @@ class Order extends Model
     {
         return $this->belongsTo(DiscountCode::class);
     }
+
+    public function refunds()
+    {
+        return $this->hasMany(Refund::class);
+    }
 }

@@ -1,4 +1,4 @@
-import { Link, usePage } from '@inertiajs/react'; // 1. Added usePage
+import { Link, usePage } from '@inertiajs/react';
 import {
   Home,
   Package,
@@ -10,7 +10,9 @@ import {
   Car,
   Activity,
   TicketPercent,
-  Newspaper
+  Newspaper,
+  RefreshCcw, // Added for Refunds
+  Map         // Added for Open Trips
 } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
@@ -36,7 +38,7 @@ const serviceItems = [
   { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
   { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
   { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
-  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Activity },
+  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Map }, // Changed icon to Map
 ];
 
 // 3. Management Group
@@ -46,6 +48,7 @@ const managementItems = [
   { name: 'admin.posts.index', title: "Blog Posts", url: route('admin.posts.index'), icon: Newspaper },
   { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
   { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
+  { name: 'admin.refunds.index', title: "Refunds", url: route('admin.refunds.index'), icon: RefreshCcw }, // Formatted to match others
 ];
 
 export function AppSidebar({ user }) {
@@ -55,7 +58,6 @@ export function AppSidebar({ user }) {
   const { auth } = usePage().props;
 
   // 3. Use the prop if available, otherwise fall back to the global auth user
-  // This safeguards against the "undefined" error if a page forgets to pass the user prop.
   const currentUser = user || auth.user || { name: 'User', email: '' };
 
   // Helper to render a list of menu items
@@ -120,7 +122,6 @@ export function AppSidebar({ user }) {
             <UserIcon className="h-6 w-6" />
             {!isCollapsed && (
             <div className="flex flex-col text-left ml-2 overflow-hidden">
-                {/* 4. Use currentUser here */}
                 <span className="text-sm font-semibold truncate">{currentUser.name}</span>
                 <span className="text-xs text-muted-foreground truncate">{currentUser.email}</span>
             </div>
