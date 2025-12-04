@@ -18,7 +18,7 @@ class Activity extends Model implements TranslatableContract
      * @var array<int, string>
      */
     protected $fillable = [
-        // 'name',  // <-- REMOVE THIS
+        'is_active', // ✅ Added for Draft/Publish feature
         'price',
         'status',
         'duration',
@@ -46,6 +46,7 @@ class Activity extends Model implements TranslatableContract
     protected $casts = [
         'price' => 'decimal:2',
         'addons' => 'array', // ✅ Add this
+        'is_active' => 'boolean', // ✅ Cast to boolean for frontend toggle
     ];
 
     /**

@@ -21,14 +21,12 @@ class CarRentalController extends Controller
         $year = $request->query('year', Carbon::now()->format('Y'));
         $month = $request->query('month', Carbon::now()->format('m'));
 
-        // *** THIS IS THE CHANGE ***
-        // We are re-introducing pagination for a cleaner, faster list view.
         $carRentals = CarRental::with(['images', 'availabilities' => function ($query) use ($month, $year) {
             $query->whereYear('date', $year)->whereMonth('date', $month);
         }])
-        ->latest() // Order by most recently created
-        ->paginate(10) // Paginate the results, 10 per page
-        ->withQueryString(); // Important for keeping filters on pagination links
+        ->latest()
+        ->paginate(10)
+        ->withQueryString();
 
         return Inertia::render('Admin/CarRental/Index', [
             'carRentals' => $carRentals,
@@ -38,10 +36,9 @@ class CarRentalController extends Controller
             ]
         ]);
     }
-        public function show($id)
+
+    public function show($id)
     {
-        // ✅ FIXED: Added 'translations' to the load() method.
-        // This is the key change to make sure your data is sent to the frontend.
         $carRental = CarRental::with(['images', 'availabilities', 'translations'])->findOrFail($id);
 
         return Inertia::render('Admin/CarRental/Show', [
@@ -53,8 +50,6 @@ class CarRentalController extends Controller
         ]);
     }
 
-    // ... all other methods (store, update_availability, destroy) remain unchanged ...
-    
     public function store(Request $request)
     {
         $request->validate([
@@ -64,63 +59,32 @@ class CarRentalController extends Controller
             'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'gallery.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
         ]);
+
+        // 1. Create the Car Rental
+        // This triggers CarRentalObserver::created(), which AUTOMATICALLY inserts availability.
         $carRental = CarRental::create($request->only('car_model', 'brand', 'price_per_day'));
+
+        // 2. Handle Thumbnail
         if ($request->hasFile('thumbnail')) {
             $path = $request->file('thumbnail')->store('images/thumbnails', 'public');
             $carRental->images()->create(['url' => $path, 'type' => 'thumbnail']);
         }
+
+        // 3. Handle Gallery
         if ($request->hasFile('gallery')) {
             foreach ($request->file('gallery') as $file) {
                 $path = $file->store('images/gallery', 'public');
                 $carRental->images()->create(['url' => $path, 'type' => 'gallery']);
             }
         }
-        $startDate = Carbon::today();
-        for ($i = 0; $i < 365; $i++) {
-            $carRental->availabilities()->create([
-                'date' => $startDate->copy()->addDays($i),
-                'status' => 'available'
-            ]);
-        }
+
+        // ❌ REMOVED: The manual availability loop.
+        // The Observer already did this. Keeping it here caused the Duplicate Entry error.
+
         return redirect()->route('admin.rentals.index')->with('success', 'Car rental created successfully.');
     }
 
-    public function update_availability(Request $request, $id)
-    {
-        $request->validate([
-            'year' => 'required|integer|date_format:Y',
-            'month' => 'required|integer|between:1,12',
-            'statuses' => 'required|array'
-        ]);
-        $carRental = CarRental::findOrFail($id);
-        $year = $request->input('year');
-        $month = $request->input('month');
-        $statuses = $request->input('statuses', []);
-        foreach ($statuses as $day => $newStatus) {
-            if (!ctype_digit((string)$day)) {
-                continue;
-            }
-            $date = Carbon::createFromDate($year, $month, $day)->toDateString();
-            $availability = CarRentalAvailability::firstOrNew([
-                'car_rental_id' => $carRental->id,
-                'date' => $date,
-            ]);
-            if (in_array($newStatus, ['available', 'maintenance', 'booked'])) {
-                $availability->status = $newStatus;
-                $availability->save();
-            }
-        }
-        return back()->with('success', 'Availability updated successfully.');
-    }
-
-    public function destroy($id)
-    {
-        $carRental = CarRental::findOrFail($id);
-        $carRental->delete();
-        return redirect()->route('admin.rentals.index')->with('success', 'Car rental deleted successfully.');
-    }
-
-     public function update(Request $request, CarRental $carRental)
+    public function update(Request $request, CarRental $carRental)
     {
         $validatedData = $request->validate([
             // Non-translatable fields
@@ -133,7 +97,7 @@ class CarRentalController extends Controller
 
             // Translatable fields validation
             'translations' => 'required|array',
-            'translations.en' => 'required|array', // Ensure English is present as a fallback
+            'translations.en' => 'required|array',
             'translations.*.description' => 'nullable|string',
             'translations.*.car_type' => 'nullable|string|max:255',
             'translations.*.transmission' => 'nullable|string|max:255',
@@ -141,7 +105,7 @@ class CarRentalController extends Controller
             'translations.*.features' => 'nullable|string',
         ]);
 
-        // ✅ FIXED: Step 1 -> Update the main CarRental model with ONLY non-translatable data.
+        // Update main model
         $carRental->update($request->only([
             'brand',
             'car_model',
@@ -150,9 +114,8 @@ class CarRentalController extends Controller
             'price_per_day',
             'status',
         ]));
-        
-        // ✅ FIXED: Step 2 -> Now, also update the main table's fallback fields using the English translation.
-        // This ensures you always have default data on the main car_rentals table.
+
+        // Update fallback fields on main table
         $englishTranslation = $validatedData['translations']['en'];
         $carRental->description = $englishTranslation['description'];
         $carRental->car_type = $englishTranslation['car_type'];
@@ -161,12 +124,10 @@ class CarRentalController extends Controller
         $carRental->features = !empty($englishTranslation['features']) ? array_map('trim', explode(',', $englishTranslation['features'])) : [];
         $carRental->save();
 
-
-        // ✅ FIXED: Step 3 -> Loop through and save the detailed translations to the separate table.
-        // This part was correct before, but it's crucial that it runs after the main update.
+        // Update translations table
         foreach ($validatedData['translations'] as $locale => $data) {
             $carRental->translations()->updateOrCreate(
-                ['locale' => $locale], // Match by locale
+                ['locale' => $locale],
                 [
                     'description' => $data['description'],
                     'car_type' => $data['car_type'],
@@ -180,63 +141,93 @@ class CarRentalController extends Controller
         return redirect()->route('admin.rentals.show', $carRental->id)
                          ->with('success', 'Car rental updated successfully.');
     }
-public function storeImage(Request $request, $id)
-{
-    $request->validate([
-        'gallery' => 'required|array',
-        'gallery.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048'
-    ]);
 
-    $carRental = CarRental::findOrFail($id);
+    public function update_availability(Request $request, $id)
+    {
+        $request->validate([
+            'year' => 'required|integer|date_format:Y',
+            'month' => 'required|integer|between:1,12',
+            'statuses' => 'required|array'
+        ]);
+        $carRental = CarRental::findOrFail($id);
+        $year = $request->input('year');
+        $month = $request->input('month');
+        $statuses = $request->input('statuses', []);
 
-    if ($request->hasFile('gallery')) {
-        foreach ($request->file('gallery') as $file) {
-            $path = $file->store('images/gallery', 'public');
-            $carRental->images()->create(['url' => $path, 'type' => 'gallery']);
+        foreach ($statuses as $day => $newStatus) {
+            if (!ctype_digit((string)$day)) {
+                continue;
+            }
+            $date = Carbon::createFromDate($year, $month, $day)->toDateString();
+
+            // Use updateOrCreate to handle existing records cleanly
+            CarRentalAvailability::updateOrCreate(
+                ['car_rental_id' => $carRental->id, 'date' => $date],
+                ['status' => $newStatus]
+            );
         }
+        return back()->with('success', 'Availability updated successfully.');
     }
 
-    return back()->with('success', 'Gallery images uploaded successfully.');
-}
+    public function destroy($id)
+    {
+        $carRental = CarRental::findOrFail($id);
+        $carRental->delete();
+        return redirect()->route('admin.rentals.index')->with('success', 'Car rental deleted successfully.');
+    }
 
-/**
- * Remove the specified image from storage.
- */
-public function destroyImage($carRentalId, $imageId)
-{
-    // Ensure the image belongs to the car rental for security
-    $carRental = CarRental::findOrFail($carRentalId);
-    $image = $carRental->images()->findOrFail($imageId);
+    public function storeImage(Request $request, $id)
+    {
+        $request->validate([
+            'gallery' => 'required|array',
+            'gallery.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048'
+        ]);
 
-    // Optional: Delete the actual file from storage
-    // Storage::disk('public')->delete($image->url);
+        $carRental = CarRental::findOrFail($id);
 
-    $image->delete();
+        if ($request->hasFile('gallery')) {
+            foreach ($request->file('gallery') as $file) {
+                $path = $file->store('images/gallery', 'public');
+                $carRental->images()->create(['url' => $path, 'type' => 'gallery']);
+            }
+        }
 
-    return back()->with('success', 'Image deleted successfully.');
-}
+        return back()->with('success', 'Gallery images uploaded successfully.');
+    }
 
-public function updateThumbnail(Request $request, CarRental $carRental)
+    public function destroyImage($carRentalId, $imageId)
+    {
+        $carRental = CarRental::findOrFail($carRentalId);
+        $image = $carRental->images()->findOrFail($imageId);
+
+        if (Storage::disk('public')->exists($image->url)) {
+             Storage::disk('public')->delete($image->url);
+        }
+
+        $image->delete();
+
+        return back()->with('success', 'Image deleted successfully.');
+    }
+
+    public function updateThumbnail(Request $request, CarRental $carRental)
     {
         $request->validate([
             'thumbnail' => ['required', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
-        // Find and delete the old thumbnail from storage and database
         if ($oldThumbnail = $carRental->images()->where('type', 'thumbnail')->first()) {
-            // Now this line will correctly use the Storage facade
-            Storage::disk('public')->delete($oldThumbnail->url); //
+            if (Storage::disk('public')->exists($oldThumbnail->url)) {
+                Storage::disk('public')->delete($oldThumbnail->url);
+            }
             $oldThumbnail->delete();
         }
 
-        // Store the new thumbnail file
-        $path = $request->file('thumbnail')->store('car_rentals/thumbnails', 'public'); //
+        $path = $request->file('thumbnail')->store('car_rentals/thumbnails', 'public');
 
-        // Create a new image record in the database
         $carRental->images()->create([
             'url' => $path,
             'type' => 'thumbnail',
-        ]); //
+        ]);
 
         return back()->with('success', 'Thumbnail updated successfully.');
     }

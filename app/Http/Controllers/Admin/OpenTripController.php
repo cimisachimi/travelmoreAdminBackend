@@ -37,6 +37,7 @@ class OpenTripController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'is_active' => 'boolean',
             'duration' => 'required|integer|min:1',
             'rating' => 'required|numeric|min:0|max:5',
             'map_url' => 'nullable|string',
@@ -63,17 +64,17 @@ class OpenTripController extends Controller
 
         DB::beginTransaction();
         try {
-            // Prepare JSON structures
             $cost = [
                 'included' => $request->includes ?? [],
                 'excluded' => $request->excludes ?? []
             ];
 
             $data = [
+                'is_active' => $validated['is_active'] ?? false, // ✅ Safe fallback
                 'duration' => $validated['duration'],
                 'rating' => $validated['rating'],
                 'map_url' => $validated['map_url'],
-                'price_tiers' => $request->price_tiers, // Model accessor handles json_encode
+                'price_tiers' => $request->price_tiers,
                 'meeting_points' => $request->meeting_points,
                 'itinerary' => $request->itinerary,
                 'cost' => $cost,
@@ -108,8 +109,9 @@ class OpenTripController extends Controller
     public function edit(OpenTrip $openTrip)
     {
         $openTrip->load(['translations', 'images']);
+        // Cast is_active to boolean for React
+        $openTrip->is_active = (bool) $openTrip->is_active;
 
-        // Prepare cost breakdown for frontend
         $cost = $openTrip->cost ?? ['included' => [], 'excluded' => []];
 
         return Inertia::render('Admin/OpenTrip/Edit', [
@@ -121,6 +123,7 @@ class OpenTripController extends Controller
     public function update(Request $request, OpenTrip $openTrip)
     {
         $validated = $request->validate([
+            'is_active' => 'boolean',
             'duration' => 'required|integer|min:1',
             'rating' => 'required|numeric|min:0|max:5',
             'map_url' => 'nullable|string',
@@ -149,6 +152,7 @@ class OpenTripController extends Controller
             ];
 
             $openTrip->update([
+                'is_active' => $validated['is_active'] ?? false, // ✅ FIXED: Added '?? false' fallback
                 'duration' => $validated['duration'],
                 'rating' => $validated['rating'],
                 'map_url' => $validated['map_url'],

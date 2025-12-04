@@ -1,11 +1,10 @@
 <?php
-// File: app/Http/Controllers/Api/Public/ActivityController.php
 
 namespace App\Http\Controllers\Api\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
-use Illuminate\Http\Request; // Import Request
+use Illuminate\Http\Request;
 
 class ActivityController extends Controller
 {
@@ -19,9 +18,11 @@ class ActivityController extends Controller
         $locale = $request->header('Accept-Language', config('app.fallback_locale'));
 
         // Eager load translations and images
+        // ✅ ADDED: where('is_active', true)
         $activities = Activity::with(['translations', 'images'])
-            ->latest() // Order by latest
-            ->paginate(10); // Or ->get() if you don't need pagination
+            ->where('is_active', true)
+            ->latest()
+            ->paginate(10);
 
         // Map over the results to format them nicely for the API
         $formattedActivities = $activities->through(function ($activity) use ($locale) {
@@ -51,13 +52,15 @@ class ActivityController extends Controller
      * Display the specified resource, including translations and images.
      * Uses locale from request header or fallback.
      */
-    public function show(Request $request, Activity $activity)
+    public function show(Request $request, $id)
     {
          // Get locale from header or fallback to config
         $locale = $request->header('Accept-Language', config('app.fallback_locale'));
 
-        // Eager load translations and images
-        $activity->load(['translations', 'images']);
+        // ✅ ADDED: Find ONLY if active
+        $activity = Activity::with(['translations', 'images'])
+            ->where('is_active', true)
+            ->findOrFail($id);
 
         // Get specific locale translation or fallback
         $translation = $activity->translateOrDefault($locale);

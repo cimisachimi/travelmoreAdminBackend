@@ -15,6 +15,7 @@ class OpenTrip extends Model implements TranslatableContract
     public $translatedAttributes = ['name', 'location', 'category', 'description'];
 
     protected $fillable = [
+        'is_active',
         'duration',
         'rating',
         'map_url',
@@ -25,6 +26,7 @@ class OpenTrip extends Model implements TranslatableContract
     ];
 
     protected $casts = [
+        'is_active' => 'boolean',
         'rating' => 'decimal:1',
         'price_tiers' => 'array',
         'itinerary' => 'array',
@@ -32,9 +34,8 @@ class OpenTrip extends Model implements TranslatableContract
         'meeting_points' => 'array',
     ];
 
-    protected $appends = ['thumbnail_url', 'images_url'];
-
-    // --- Relationships ---
+    // ✅ FIXED: Added 'starting_from_price' so it's sent to the frontend
+    protected $appends = ['thumbnail_url', 'images_url', 'starting_from_price'];
 
     public function images()
     {
@@ -45,8 +46,6 @@ class OpenTrip extends Model implements TranslatableContract
     {
         return $this->morphMany(Booking::class, 'bookable');
     }
-
-    // --- Accessors ---
 
     public function getThumbnailUrlAttribute()
     {
@@ -59,27 +58,33 @@ class OpenTrip extends Model implements TranslatableContract
         return $this->images->map(fn($img) => $img->full_url);
     }
 
-    // --- Helpers ---
-
-    /**
-     * Calculate "Starting From" price based on the lowest price in tiers.
-     */
+    // This accessor calculates the price, but wasn't being appended before
     public function getStartingFromPriceAttribute()
     {
-        if (empty($this->price_tiers)) return 0;
-        return collect($this->price_tiers)->min('price');
+        if (empty($this->price_tiers) || !is_array($this->price_tiers)) return 0;
+
+        // Ensure we extract valid numeric prices
+        $minPrice = collect($this->price_tiers)->min('price');
+
+        return $minPrice ? (float) $minPrice : 0;
     }
 
-    /**
-     * Helper to sort price tiers by min_pax
-     */
     protected function priceTiers(): Attribute
     {
         return Attribute::make(
             get: function ($value) {
-                $tiers = json_decode($value ?: '[]', true);
-                usort($tiers, fn ($a, $b) => ($a['min_pax'] ?? 0) <=> ($b['min_pax'] ?? 0));
-                return $tiers;
+                // Handle case where value is already an array (due to casting) or null
+                if (is_array($value)) {
+                    $tiers = $value;
+                } else {
+                    $tiers = json_decode($value ?: '[]', true);
+                }
+
+                if (is_array($tiers)) {
+                    usort($tiers, fn ($a, $b) => ($a['min_pax'] ?? 0) <=> ($b['min_pax'] ?? 0));
+                }
+
+                return $tiers ?: [];
             },
             set: function ($value) {
                 return json_encode(is_array($value) ? array_values($value) : []);
