@@ -17,59 +17,45 @@ class HolidayPackageController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+public function index(Request $request)
     {
         $query = HolidayPackage::with('images');
 
-        // ✅ ADD: Search Logic for Translatable Fields
         if ($request->input('search')) {
             $search = $request->input('search');
-            // Uses Astrotomic's whereTranslationLike for cleaner syntax on translated fields
             $query->whereTranslationLike('name', "%{$search}%")
                   ->orWhereTranslationLike('location', "%{$search}%");
         }
 
+        // You might want to show status in the dashboard list
         $packages = $query->latest()
             ->paginate(10)
-            ->withQueryString(); // Keep search params in pagination links
+            ->withQueryString();
 
         return Inertia::render('Admin/HolidayPackage/Index', [
             'packages' => $packages,
-            'filters' => $request->only(['search']), // Pass search term back to view for the input field
+            'filters' => $request->only(['search']),
             'successMessage' => session('success'),
             'errorMessage' => session('error'),
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         return Inertia::render('Admin/HolidayPackage/Create');
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(HolidayPackage $holidayPackage)
     {
-        // Load translations and images
         $holidayPackage->load(['images', 'translations']);
-
          return Inertia::render('Admin/HolidayPackage/Show', [
              'package' => $holidayPackage
          ]);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(HolidayPackage $holidayPackage)
     {
-        // Eager load images and translations
         $holidayPackage->load(['images', 'translations']);
-
         $packageData = $holidayPackage->toArray();
         $packageData['translations'] = $holidayPackage->getTranslationsArray();
 
@@ -80,25 +66,21 @@ class HolidayPackageController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        // 1. Validate request data
         $validatedData = $request->validate([
+            'is_active' => 'boolean', // ✅ Validation for status
+
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
-
-            // [NEW] Validation for price_tiers
             'price_tiers' => 'required|array|min:1',
             'price_tiers.*.min_pax' => 'required|integer|min:1',
             'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
             'price_tiers.*.price' => 'required|numeric|min:0',
 
-            // --- Validate as arrays ---
+            // --- Arrays ---
             'itinerary' => 'nullable|array',
             'itinerary.*.day' => 'required_with:itinerary|integer|min:1',
             'itinerary.*.title' => 'required_with:itinerary|string|max:255',
@@ -115,34 +97,48 @@ class HolidayPackageController extends Controller
             'trip_info.*.label' => 'required_with:trip_info|string|max:255',
             'trip_info.*.value' => 'required_with:trip_info|string|max:255',
             'trip_info.*.icon' => 'nullable|string|max:50',
+
             // --- Translated ---
             'name' => 'required|array','name.en' => 'required|string|max:255','name.id' => 'required|string|max:255',
             'description' => 'required|array','description.en' => 'nullable|string','description.id' => 'nullable|string',
             'location' => 'required|array','location.en' => 'nullable|string|max:255','location.id' => 'nullable|string|max:255',
             'category' => 'required|array','category.en' => 'nullable|string|max:255','category.id' => 'nullable|string|max:255',
+
             // --- Images ---
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ], [
             'price_tiers.required' => 'You must add at least one price tier.',
             'price_tiers.min' => 'You must add at least one price tier.',
-            'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
-            'price_tiers.*.min_pax.integer' => 'Min Pax must be a number.',
-            'price_tiers.*.min_pax.min' => 'Min Pax must be at least 1.',
-            'price_tiers.*.max_pax.gte' => 'Max Pax must be greater than or equal to Min Pax.',
-            'price_tiers.*.price.required' => 'The Price field is required.',
-            'price_tiers.*.price.numeric' => 'The Price must be a number.',
         ]);
 
         DB::beginTransaction();
         try {
-            // 2. Prepare data for model creation (exclude images)
-            $packageData = Arr::except($validatedData, ['images']);
+            // ✅ FIX: Separate translation fields from main fields
+            $translationFields = ['name', 'description', 'location', 'category'];
+            $translationData = [];
 
-            // 3. Create the HolidayPackage
+            foreach (['en', 'id'] as $locale) {
+                foreach ($translationFields as $field) {
+                    if (isset($validatedData[$field][$locale])) {
+                        $translationData[$locale][$field] = $validatedData[$field][$locale];
+                    }
+                }
+            }
+
+            // Remove translation arrays and images from main package data
+            $packageData = Arr::except($validatedData, array_merge(['images'], $translationFields));
+
+            // Create the HolidayPackage (Main Table)
             $package = HolidayPackage::create($packageData);
 
-            // 4. Handle Image Uploads
+            // Save Translations (Translation Table)
+            foreach ($translationData as $locale => $data) {
+                $package->translateOrNew($locale)->fill($data);
+            }
+            $package->save();
+
+            // Handle Image Uploads
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
@@ -160,31 +156,23 @@ class HolidayPackageController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error creating holiday package: ' . $e->getMessage());
-             $previous = $e->getPrevious();
-             \Log::error($previous ? $previous->getMessage() : 'No previous exception details.');
             return redirect()->back()->with('error', 'Failed to create holiday package. Error: Check logs.')->withInput();
         }
     }
-
     /**
      * Update the specified resource in storage.
      */
     public function update(Request $request, HolidayPackage $holidayPackage)
     {
-        // 1. Validate request data
         $validatedData = $request->validate([
-            // --- Non-translated ---
+            'is_active' => 'boolean', // ✅ Validation for status
             'duration' => 'required|integer|min:1',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
-
-            // [NEW] Validation for price_tiers
             'price_tiers' => 'required|array|min:1',
             'price_tiers.*.min_pax' => 'required|integer|min:1',
             'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
             'price_tiers.*.price' => 'required|numeric|min:0',
-
-             // --- Array Validation ---
             'itinerary' => 'nullable|array',
             'itinerary.*.day' => 'required_with:itinerary|integer|min:1',
             'itinerary.*.title' => 'required_with:itinerary|string|max:255',
@@ -201,32 +189,18 @@ class HolidayPackageController extends Controller
             'trip_info.*.label' => 'required_with:trip_info|string|max:255',
             'trip_info.*.value' => 'required_with:trip_info|string|max:255',
             'trip_info.*.icon' => 'nullable|string|max:50',
-             // --- Translated ---
             'name' => 'required|array','name.en' => 'required|string|max:255','name.id' => 'required|string|max:255',
             'description' => 'required|array','description.en' => 'nullable|string','description.id' => 'nullable|string',
             'location' => 'required|array','location.en' => 'nullable|string|max:255','location.id' => 'nullable|string|max:255',
             'category' => 'required|array','category.en' => 'nullable|string|max:255','category.id' => 'nullable|string|max:255',
-             // --- Images / Deletion ---
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'delete_images' => 'nullable|array',
             'delete_images.*' => 'integer|exists:images,id'
-        ], [
-            'price_tiers.required' => 'You must add at least one price tier.',
-            'price_tiers.min' => 'You must add at least one price tier.',
-            'price_tiers.*.min_pax.required' => 'The Min Pax field is required.',
-            'price_tiers.*.min_pax.integer' => 'Min Pax must be a number.',
-            'price_tiers.*.min_pax.min' => 'Min Pax must be at least 1.',
-            'price_tiers.*.max_pax.gte' => 'Max Pax must be greater than or equal to Min Pax.',
-            'price_tiers.*.price.required' => 'The Price field is required.',
-            'price_tiers.*.price.numeric' => 'The Price must be a number.',
         ]);
-
-        \Log::info("Attempting to update HolidayPackage ID: " . $holidayPackage->id);
 
         DB::beginTransaction();
         try {
-            // 2. Separate translation data
             $translationData = [];
             foreach (['en', 'id'] as $locale) {
                  if (isset($validatedData['name'][$locale])) {
@@ -239,10 +213,9 @@ class HolidayPackageController extends Controller
                  }
             }
 
-            // 3. Prepare data for the main model update
-            $packageData = Arr::except($validatedData, ['images', 'delete_images', 'en', 'id']);
+            // Exclude translations and images
+            $packageData = Arr::except($validatedData, ['images', 'delete_images', 'name', 'description', 'location', 'category', 'en', 'id']);
 
-             // Ensure array fields are set to null if empty to clear them if needed
              $arrayFields = ['itinerary', 'cost', 'faqs', 'trip_info'];
              foreach ($arrayFields as $field) {
                  if (!isset($packageData[$field]) || !is_array($packageData[$field]) || empty($packageData[$field])) {
@@ -250,18 +223,14 @@ class HolidayPackageController extends Controller
                  }
              }
 
-            // 4. Update the main model attributes
             $holidayPackage->fill($packageData);
 
-            // 5. Update translations
             foreach ($translationData as $locale => $data) {
                 $holidayPackage->translateOrNew($locale)->fill($data);
             }
 
-            // 6. Save the model and translations
             $holidayPackage->save();
 
-            // 7. Handle Image Deletion
             if ($request->filled('delete_images')) {
                  $imagesToDelete = Image::whereIn('id', $request->input('delete_images'))
                                        ->where('imageable_id', $holidayPackage->id)
@@ -275,7 +244,6 @@ class HolidayPackageController extends Controller
                 }
             }
 
-            // 8. Handle New Image Uploads
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
@@ -288,12 +256,11 @@ class HolidayPackageController extends Controller
 
         } catch (ValidationException $e) {
              DB::rollBack();
-             \Log::error("ValidationException during update:", $e->errors());
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Error updating holiday package: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return redirect()->back()->with('error', 'Failed to update holiday package. Error: Check logs.')->withInput();
+            \Log::error('Error updating holiday package: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to update holiday package.')->withInput();
         }
     }
 

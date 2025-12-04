@@ -6,19 +6,19 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import { Textarea } from "@/Components/ui/textarea";
 import InputError from "@/Components/InputError";
-import { ArrowLeft, Upload, Package, Clock, DollarSign, Star, MapPin, Plus, Trash2 } from "lucide-react"; // Added Plus and Trash2
+import Checkbox from "@/Components/Checkbox"; // ✅ Added Checkbox Import
+import { ArrowLeft, Upload, Package, Clock, DollarSign, Star, MapPin, Plus, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import React, { useState } from "react";
-import { toast } from 'sonner'; // Added toast for feedback
-import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater'; // Adjust path if needed
+import { toast } from 'sonner';
+import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater';
+
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
 // --- HELPER COMPONENTS ---
 
-// [FIXED] Component for Translation Fields (to match Edit.jsx logic)
 const TranslationFields = ({ locale, data, setData, errors }) => {
   const handleChange = (field, value) => {
-    // Use dot-notation to set nested state, matching Edit.jsx
     setData(`${field}.${locale}`, value);
   };
 
@@ -34,7 +34,6 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
           className={errors?.[`name.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`name.${locale}`]} className="mt-1" />
-        {/* Show parent 'name' error on the 'en' tab for visibility */}
         {locale === 'en' && errors?.name && <InputError message={errors.name} className="mt-1" />}
       </div>
       <div>
@@ -47,7 +46,6 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
           className={errors?.[`description.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`description.${locale}`]} className="mt-1" />
-        {locale === 'en' && errors?.description && <InputError message={errors.description} className="mt-1" />}
       </div>
       <div>
         <Label htmlFor={`location_${locale}`}>Location ({locale.toUpperCase()})</Label>
@@ -58,7 +56,6 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
           className={errors?.[`location.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`location.${locale}`]} className="mt-1" />
-        {locale === 'en' && errors?.location && <InputError message={errors.location} className="mt-1" />}
       </div>
       <div>
         <Label htmlFor={`category_${locale}`}>Category ({locale.toUpperCase()})</Label>
@@ -69,13 +66,11 @@ const TranslationFields = ({ locale, data, setData, errors }) => {
           className={errors?.[`category.${locale}`] ? 'border-red-500' : ''}
         />
         <InputError message={errors?.[`category.${locale}`]} className="mt-1" />
-        {locale === 'en' && errors?.category && <InputError message={errors.category} className="mt-1" />}
       </div>
     </div>
   );
 };
 
-// Component for Image Upload section (Unchanged, but still needed)
 const ImageUploadManager = ({ data, setData, errors }) => {
   const [imagePreviews, setImagePreviews] = useState([]);
 
@@ -92,7 +87,6 @@ const ImageUploadManager = ({ data, setData, errors }) => {
     return () => imagePreviews.forEach(url => URL.revokeObjectURL(url));
   }, [imagePreviews]);
 
-
   return (
     <Card>
       <CardHeader>
@@ -100,7 +94,7 @@ const ImageUploadManager = ({ data, setData, errors }) => {
         <CardDescription>Upload one or more images. The first image will be set as the thumbnail.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Label htmlFor="images">Select Images <span className="text-red-500">*</span></Label>
+        <Label htmlFor="images">Select Images</Label>
         <Input
           id="images"
           type="file"
@@ -125,9 +119,6 @@ const ImageUploadManager = ({ data, setData, errors }) => {
   );
 }
 
-// --- [NEW] REPEATER COMPONENTS (Copied from Edit.jsx) ---
-
-// Repeater for Itinerary
 const ItineraryRepeater = ({ items = [], setData, errors }) => {
   const handleItineraryChange = (index, field, value) => {
     setData(`itinerary.${index}.${field}`, value);
@@ -147,9 +138,8 @@ const ItineraryRepeater = ({ items = [], setData, errors }) => {
         <Card key={index} className="p-4 bg-muted/50 dark:bg-muted/30">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
-              <Label htmlFor={`itinerary_${index}_day`}>Day</Label>
+              <Label>Day</Label>
               <Input
-                id={`itinerary_${index}_day`}
                 type="number"
                 value={item.day || ''}
                 onChange={e => handleItineraryChange(index, 'day', parseInt(e.target.value, 10) || '')}
@@ -158,9 +148,8 @@ const ItineraryRepeater = ({ items = [], setData, errors }) => {
               <InputError message={errors?.[`itinerary.${index}.day`]} className="mt-1" />
             </div>
             <div className="md:col-span-2">
-              <Label htmlFor={`itinerary_${index}_title`}>Title</Label>
+              <Label>Title</Label>
               <Input
-                id={`itinerary_${index}_title`}
                 value={item.title || ''}
                 onChange={e => handleItineraryChange(index, 'title', e.target.value)}
                 className={errors?.[`itinerary.${index}.title`] ? 'border-red-500' : ''}
@@ -168,9 +157,8 @@ const ItineraryRepeater = ({ items = [], setData, errors }) => {
               <InputError message={errors?.[`itinerary.${index}.title`]} className="mt-1" />
             </div>
             <div className="md:col-span-3">
-              <Label htmlFor={`itinerary_${index}_description`}>Description</Label>
+              <Label>Description</Label>
               <Textarea
-                id={`itinerary_${index}_description`}
                 value={item.description || ''}
                 onChange={e => handleItineraryChange(index, 'description', e.target.value)}
                 rows={3}
@@ -193,7 +181,6 @@ const ItineraryRepeater = ({ items = [], setData, errors }) => {
   );
 };
 
-// Repeater for Cost (Included/Excluded)
 const CostRepeater = ({ costData = { included: [], excluded: [] }, setData, errors }) => {
   const handleCostChange = (type, index, value) => {
     setData(`cost.${type}.${index}`, value);
@@ -226,7 +213,6 @@ const CostRepeater = ({ costData = { included: [], excluded: [] }, setData, erro
             </Button>
           </div>
         ))}
-        <InputError message={errors?.['cost.included']} className="mt-1" />
         <Button type="button" variant="outline" size="sm" onClick={() => addCostItem('included')}>
           <Plus className="h-4 w-4 mr-1" /> Add Included
         </Button>
@@ -246,7 +232,6 @@ const CostRepeater = ({ costData = { included: [], excluded: [] }, setData, erro
             </Button>
           </div>
         ))}
-        <InputError message={errors?.['cost.excluded']} className="mt-1" />
         <Button type="button" variant="outline" size="sm" onClick={() => addCostItem('excluded')}>
           <Plus className="h-4 w-4 mr-1" /> Add Excluded
         </Button>
@@ -255,7 +240,6 @@ const CostRepeater = ({ costData = { included: [], excluded: [] }, setData, erro
   );
 };
 
-// Repeater for FAQs
 const FaqsRepeater = ({ items = [], setData, errors }) => {
   const handleFaqChange = (index, field, value) => {
     setData(`faqs.${index}.${field}`, value);
@@ -275,9 +259,8 @@ const FaqsRepeater = ({ items = [], setData, errors }) => {
         <Card key={index} className="p-4 bg-muted/50 dark:bg-muted/30">
           <div className="space-y-3">
             <div>
-              <Label htmlFor={`faq_${index}_question`}>Question</Label>
+              <Label>Question</Label>
               <Input
-                id={`faq_${index}_question`}
                 value={item.question || ''}
                 onChange={e => handleFaqChange(index, 'question', e.target.value)}
                 className={errors?.[`faqs.${index}.question`] ? 'border-red-500' : ''}
@@ -285,9 +268,8 @@ const FaqsRepeater = ({ items = [], setData, errors }) => {
               <InputError message={errors?.[`faqs.${index}.question`]} className="mt-1" />
             </div>
             <div>
-              <Label htmlFor={`faq_${index}_answer`}>Answer</Label>
+              <Label>Answer</Label>
               <Textarea
-                id={`faq_${index}_answer`}
                 value={item.answer || ''}
                 onChange={e => handleFaqChange(index, 'answer', e.target.value)}
                 rows={3}
@@ -310,7 +292,6 @@ const FaqsRepeater = ({ items = [], setData, errors }) => {
   );
 };
 
-// Repeater for Trip Info
 const TripInfoRepeater = ({ items = [], setData, errors }) => {
   const handleInfoChange = (index, field, value) => {
     setData(`trip_info.${index}.${field}`, value);
@@ -330,9 +311,8 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
         <Card key={index} className="p-4 bg-muted/50 dark:bg-muted/30">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <Label htmlFor={`tripinfo_${index}_label`}>Label</Label>
+              <Label>Label</Label>
               <Input
-                id={`tripinfo_${index}_label`}
                 value={item.label || ''}
                 onChange={e => handleInfoChange(index, 'label', e.target.value)}
                 className={errors?.[`trip_info.${index}.label`] ? 'border-red-500' : ''}
@@ -340,9 +320,8 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
               <InputError message={errors?.[`trip_info.${index}.label`]} className="mt-1" />
             </div>
             <div>
-              <Label htmlFor={`tripinfo_${index}_value`}>Value</Label>
+              <Label>Value</Label>
               <Input
-                id={`tripinfo_${index}_value`}
                 value={item.value || ''}
                 onChange={e => handleInfoChange(index, 'value', e.target.value)}
                 className={errors?.[`trip_info.${index}.value`] ? 'border-red-500' : ''}
@@ -350,9 +329,8 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
               <InputError message={errors?.[`trip_info.${index}.value`]} className="mt-1" />
             </div>
             <div>
-              <Label htmlFor={`tripinfo_${index}_icon`}>Icon (Optional Emoji)</Label>
+              <Label>Icon (Optional Emoji)</Label>
               <Input
-                id={`tripinfo_${index}_icon`}
                 value={item.icon || ''}
                 onChange={e => handleInfoChange(index, 'icon', e.target.value)}
                 placeholder="e.g., 👥"
@@ -375,40 +353,42 @@ const TripInfoRepeater = ({ items = [], setData, errors }) => {
   );
 };
 
-
 // --- MAIN CREATE COMPONENT ---
+
 export default function CreateHolidayPackage({ auth }) {
 
   const { data, setData, post, processing, errors, reset } = useForm({
-    // Non-translated fields
+    // ✅ Initialize is_active
+    is_active: false,
+
+    // Core Data
     duration: '',
-    price_tiers: [], // For Create.jsx
+    price_tiers: [],
     rating: '',
     map_url: '',
 
-    // [FIXED] Initialize JSON fields as objects/arrays, not strings
+    // JSON fields (initialized as empty arrays/objects)
     itinerary: [],
     cost: { included: [], excluded: [] },
     faqs: [],
     trip_info: [],
 
-    // Initialize translations (this structure was already correct)
+    // Translations
     name: { en: '', id: '' },
     description: { en: '', id: '' },
     location: { en: '', id: '' },
     category: { en: '', id: '' },
 
-    // Initialize images field
-    images: null, // This will hold the FileList
+    // Images
+    images: null,
   });
 
-  // Handle submission
   const submit = (e) => {
     e.preventDefault();
     post(route('admin.packages.store'), {
       preserveScroll: true,
       onSuccess: () => {
-        reset(); // Reset form fields on successful creation
+        reset();
         toast.success('Package created successfully!');
       },
       onError: (errs) => {
@@ -439,15 +419,35 @@ export default function CreateHolidayPackage({ auth }) {
       <div className="py-12">
         <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
           <form onSubmit={submit} className="space-y-6">
+
+            {/* ✅ Publish / Draft Toggle */}
+            <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20">
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="is_active"
+                            checked={data.is_active}
+                            onChange={(e) => setData('is_active', e.target.checked)}
+                        />
+                        <Label htmlFor="is_active" className="font-semibold cursor-pointer">
+                            Publish to Frontend?
+                        </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1 ml-6">
+                        If unchecked, this package will be saved as a <strong>Draft</strong> and will not be visible to customers.
+                    </p>
+                </CardContent>
+            </Card>
+
             <Tabs defaultValue="core" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="core">Core Details</TabsTrigger>
                 <TabsTrigger value="translations">Translations</TabsTrigger>
-                <TabsTrigger value="structured">Structured Data</TabsTrigger> {/* [FIXED] Renamed tab */}
+                <TabsTrigger value="structured">Structured Data</TabsTrigger>
                 <TabsTrigger value="images">Images</TabsTrigger>
               </TabsList>
 
-              {/* Core Details Tab (Unchanged) */}
+              {/* Core Details Tab */}
               <TabsContent value="core">
                 <Card>
                   <CardHeader>
@@ -467,6 +467,7 @@ export default function CreateHolidayPackage({ auth }) {
                         setData={setData}
                         errors={errors}
                       />
+                       <InputError message={errors.price_tiers} className="mt-1 block" />
                     </div>
                     <div>
                       <Label htmlFor="rating">Rating (0-5)</Label>
@@ -482,7 +483,7 @@ export default function CreateHolidayPackage({ auth }) {
                 </Card>
               </TabsContent>
 
-              {/* Translations Tab (Unchanged, but TranslationFields component is fixed) */}
+              {/* Translations Tab */}
               <TabsContent value="translations">
                 <Card>
                   <CardHeader>
@@ -506,7 +507,7 @@ export default function CreateHolidayPackage({ auth }) {
                 </Card>
               </TabsContent>
 
-              {/* [FIXED] JSON Data Tab -> Structured Data Tab */}
+              {/* Structured Data Tab */}
               <TabsContent value="structured">
                 <div className="space-y-6">
                   <Card>
@@ -528,13 +529,13 @@ export default function CreateHolidayPackage({ auth }) {
                 </div>
               </TabsContent>
 
-              {/* Images Tab (Unchanged) */}
+              {/* Images Tab */}
               <TabsContent value="images">
                 <ImageUploadManager data={data} setData={setData} errors={errors} />
               </TabsContent>
             </Tabs>
 
-            {/* Submit Button (Unchanged) */}
+            {/* Submit Button */}
             <div className="flex justify-end mt-6">
               <Button type="submit" disabled={processing}>
                 {processing ? 'Saving...' : 'Create Package'}

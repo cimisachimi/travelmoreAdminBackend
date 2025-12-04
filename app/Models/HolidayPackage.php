@@ -25,6 +25,7 @@ class HolidayPackage extends Model implements TranslatableContract
 
     // Hapus atribut terjemahan dari fillable utama
     protected $fillable = [
+        'is_active', // ✅ Added Draft/Publish status
         'duration',
         // 'price_regular',    // [REMOVED]
         // 'price_exclusive',  // [REMOVED]
@@ -42,6 +43,7 @@ class HolidayPackage extends Model implements TranslatableContract
 
     // Casts untuk kolom non-terjemahan
     protected $casts = [
+        'is_active' => 'boolean', // ✅ Cast to boolean
         // 'price_regular' => 'decimal:2',   // [REMOVED]
         // 'price_exclusive' => 'decimal:2', // [REMOVED]
         // 'price_child' => 'decimal:2',   // [REMOVED]

@@ -14,65 +14,54 @@ class HolidayPackageController extends Controller
      */
     private function formatPackageData($package)
     {
-        // Muat relasi gambar jika belum dimuat
+        // Load missing relationships
         $package->loadMissing('images');
 
-        // Dapatkan semua URL gambar dari accessor 'full_url' di model Image
+        // Get all image URLs
         $allImages = $package->images->map(function ($image) {
-            return $image->full_url; // Menggunakan accessor full_url dari model Image
+            return $image->full_url;
         });
 
-        // Temukan thumbnail
+        // Find thumbnail
         $thumbnail = $package->images->firstWhere('type', 'thumbnail');
 
-        // Atur atribut kustom
+        // Set custom attributes
         $package->images_url = $allImages;
         $package->thumbnail_url = $thumbnail ? $thumbnail->full_url : ($allImages->first() ?? null);
 
-        // Hapus relasi 'images' agar tidak terkirim duplikat
+        // Unset relation to avoid duplication
         unset($package->images);
 
-        // --- ✅ FIX: Ensure JSON fields are decoded ---
+        // Ensure JSON fields are decoded properly
         $jsonFields = ['itinerary', 'cost', 'faqs', 'trip_info'];
         foreach ($jsonFields as $field) {
-            // Check if the attribute exists and is a string before decoding
             if (isset($package->{$field}) && is_string($package->{$field})) {
                 $decoded = json_decode($package->{$field}, true);
-                // Only assign if decoding was successful and resulted in an array/object
                 if (json_last_error() === JSON_ERROR_NONE && (is_array($decoded) || is_object($decoded))) {
                      $package->{$field} = $decoded;
                 } else {
-                    // Handle potential decode error or non-JSON string, e.g., set to empty array
                     $package->{$field} = (strpos($field, 'cost') !== false) ? ['included' => [], 'excluded' => []] : [];
-                    // Log::warning("Failed to decode JSON field '$field' for package ID {$package->id}. Value was: " . $package->{$field});
                 }
             } elseif (!isset($package->{$field})) {
-                 // Ensure the field exists even if null in DB, initialize appropriately
                  $package->{$field} = (strpos($field, 'cost') !== false) ? ['included' => [], 'excluded' => []] : [];
             }
-            // If it's already an array (due to model casting), leave it as is.
         }
-        // --- END FIX ---
-
-
-        // Atribut terjemahan (name, description, dll.) sudah otomatis ditambahkan
-        // oleh model Translatable.
-        // Atribut dari $appends (seperti regularPrice, exclusivePrice) juga
-        // akan otomatis ditambahkan.
 
         return $package;
     }
 
     /**
-     * Get all holiday packages.
+     * Get all ACTIVE holiday packages.
      */
     public function index()
     {
+        // ✅ ADDED: where('is_active', true)
         $packages = HolidayPackage::with('images')
+            ->where('is_active', true)
             ->latest()
-            ->paginate(10); // Or ->get() if no pagination
+            ->paginate(10);
 
-        // Format setiap paket dalam data paginasi
+        // Format data
         $formattedPackages = $packages->through(function ($package) {
             return $this->formatPackageData($package);
         });
@@ -81,13 +70,15 @@ class HolidayPackageController extends Controller
     }
 
     /**
-     * Get a single holiday package by ID.
+     * Get a single ACTIVE holiday package by ID.
      */
     public function show($id)
     {
-        $package = HolidayPackage::with('images')->findOrFail($id);
+        // ✅ ADDED: where('is_active', true) to prevent accessing drafts via ID
+        $package = HolidayPackage::with('images')
+            ->where('is_active', true)
+            ->findOrFail($id);
 
-        // Format data paket tunggal
         $formattedPackage = $this->formatPackageData($package);
 
         return response()->json($formattedPackage);

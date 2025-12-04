@@ -24,8 +24,8 @@ import {
   DropdownMenuTrigger,
 } from '@/Components/ui/dropdown-menu';
 import { Button } from '@/Components/ui/button';
-import { Input } from '@/Components/ui/input'; // ✅ NEW
-import { MoreHorizontal, PlusCircle, Trash2, Edit, Star, Search, MapPin, Calendar, Image as ImageIcon } from 'lucide-react'; // ✅ Added icons
+import { Input } from '@/Components/ui/input';
+import { MoreHorizontal, PlusCircle, Trash2, Edit, Star, Search, MapPin, Calendar, Image as ImageIcon } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,9 +37,8 @@ import {
   AlertDialogTitle,
 } from "@/Components/ui/alert-dialog";
 import Pagination from '@/Components/Pagination';
-import { useState, useEffect } from 'react'; // ✅ Added useEffect
+import { useState, useEffect } from 'react';
 import { Badge } from '@/Components/ui/badge';
-import { useDebounce } from 'use-debounce'; // You might need to install this: npm i use-debounce OR implement custom debounce
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -74,9 +73,9 @@ const getStartingPrice = (tiers) => {
 export default function HolidayPackageIndex({ auth, packages, filters }) {
   const [packageToDelete, setPackageToDelete] = useState(null);
 
-  // ✅ SEARCH LOGIC
+  // SEARCH LOGIC
   const [search, setSearch] = useState(filters.search || '');
-  // Custom simple debounce logic if you don't want to install a package
+
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (search !== (filters.search || '')) {
@@ -86,7 +85,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
           { preserveState: true, preserveScroll: true }
         );
       }
-    }, 300); // 300ms delay
+    }, 300);
 
     return () => clearTimeout(delayDebounceFn);
   }, [search]);
@@ -143,7 +142,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
               </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
-               {/* ✅ SEARCH BAR */}
+               {/* SEARCH BAR */}
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                 <Input
@@ -166,7 +165,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
             <Table>
               <TableHeader className="bg-gray-50 dark:bg-gray-900/50">
                 <TableRow>
-                  <TableHead className="w-[350px] pl-6">Package Info</TableHead>
+                  <TableHead className="w-[400px] pl-6">Package Info</TableHead>
                   <TableHead>Trip Details</TableHead>
                   <TableHead>Starting Price</TableHead>
                   <TableHead className="w-[100px] text-right pr-6">Actions</TableHead>
@@ -179,7 +178,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                     return (
                       <TableRow key={pkg.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
 
-                        {/* ✅ RICH COLUMN 1: Image + Title + Meta */}
+                        {/* COLUMN 1: Image + Title + Meta + Status */}
                         <TableCell className="pl-6 py-4">
                           <div className="flex gap-4">
                             {/* Thumbnail */}
@@ -207,13 +206,23 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                                     <span className="truncate max-w-[150px]">{pkg.location || 'Unknown Location'}</span>
                                 </div>
                                 <div className="flex gap-2 mt-1">
-                                     {pkg.category && <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{pkg.category}</Badge>}
+                                     {/* ✅ STATUS BADGE */}
+                                     {pkg.is_active ? (
+                                         <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-[10px] h-5 px-1.5">
+                                             Published
+                                         </Badge>
+                                     ) : (
+                                         <Badge variant="secondary" className="text-[10px] h-5 px-1.5 text-gray-500">
+                                             Draft
+                                         </Badge>
+                                     )}
+                                     {pkg.category && <Badge variant="outline" className="text-[10px] h-5 px-1.5">{pkg.category}</Badge>}
                                 </div>
                             </div>
                           </div>
                         </TableCell>
 
-                        {/* ✅ COLUMN 2: Stats (Duration & Rating) */}
+                        {/* COLUMN 2: Stats (Duration & Rating) */}
                         <TableCell>
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -224,7 +233,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                             </div>
                         </TableCell>
 
-                        {/* ✅ COLUMN 3: Price */}
+                        {/* COLUMN 3: Price */}
                         <TableCell>
                           {startingPrice !== null ? (
                               <div className="flex flex-col">
@@ -239,7 +248,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                           )}
                         </TableCell>
 
-                        {/* ✅ COLUMN 4: Actions */}
+                        {/* COLUMN 4: Actions */}
                         <TableCell className="text-right pr-6">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

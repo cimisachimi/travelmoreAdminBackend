@@ -6,6 +6,7 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import { Textarea } from "@/Components/ui/textarea";
 import InputError from "@/Components/InputError";
+import Checkbox from "@/Components/Checkbox"; // ✅ Added Checkbox Import
 import {
   ArrowLeft, Upload, Trash2, Plus, Save,
   MapPin, Clock, Star, Languages, Layers,
@@ -164,6 +165,9 @@ const EditPackageForm = ({ pkg }) => {
   const getTrans = (locale, field) => pkg.translations?.[locale]?.[field] || '';
 
   const { data, setData, post, processing, errors, isDirty } = useForm({
+    // ✅ Include is_active in useForm
+    is_active: Boolean(pkg.is_active),
+
     duration: pkg.duration || '',
     price_tiers: pkg.price_tiers || [],
     rating: pkg.rating || '',
@@ -267,6 +271,25 @@ const EditPackageForm = ({ pkg }) => {
 
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 space-y-8 w-full pb-24"> {/* Added pb-24 for footer space */}
+
+            {/* ✅ Publish / Draft Toggle Card */}
+            <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20">
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="is_active"
+                            checked={data.is_active}
+                            onChange={(e) => setData('is_active', e.target.checked)}
+                        />
+                        <Label htmlFor="is_active" className="font-semibold cursor-pointer">
+                            Publish to Frontend?
+                        </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1 ml-6">
+                        If unchecked, this package will be saved as a <strong>Draft</strong> and will not be visible to customers.
+                    </p>
+                </CardContent>
+            </Card>
 
             {/* 1. CORE DETAILS */}
             <section id="section-core" className="space-y-4 scroll-mt-24">
@@ -479,7 +502,9 @@ const EditPackageForm = ({ pkg }) => {
   );
 };
 
-// --- GALLERY MANAGER COMPONENT ---
+// ... [GalleryManager remains exactly the same] ...
+// I am omitting it for brevity since it was not changed.
+// Assume standard GalleryManager component here (refer to your original file).
 const GalleryManager = ({ pkg }) => {
   const { data, setData, post, processing, errors, reset } = useForm({ images: [] });
   const [previews, setPreviews] = useState([]);
@@ -513,7 +538,6 @@ const GalleryManager = ({ pkg }) => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12">
-        {/* Upload Area */}
         <div className="md:col-span-1 space-y-4">
              <Card className="border-dashed border-2">
                  <CardHeader><CardTitle className="text-base">Upload New Images</CardTitle></CardHeader>
@@ -536,8 +560,6 @@ const GalleryManager = ({ pkg }) => {
                  </CardContent>
              </Card>
         </div>
-
-        {/* Gallery Grid */}
         <div className="md:col-span-2">
              <div className="flex items-center justify-between mb-4">
                  <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -567,6 +589,7 @@ const GalleryManager = ({ pkg }) => {
     </div>
   );
 };
+
 
 // --- PAGE COMPONENT ---
 export default function EditHolidayPackage({ auth, package: pkg }) {
