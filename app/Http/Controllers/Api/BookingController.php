@@ -19,32 +19,28 @@ use Carbon\Carbon;
 use App\Models\HolidayPackage;
 use App\Models\DiscountCode;
 use Illuminate\Validation\ValidationException;
-use App\Models\Setting; // <-- ADD THIS LINE
+use App\Models\Setting;
 use App\Models\OpenTrip;
+
 class BookingController extends Controller
 {
     /**
      * Store a newly created car rental booking in storage.
-     *
-     * ✅ THIS FUNCTION HAS BEEN FIXED
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
         $validated = $request->validate([
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            // ✅ FIX: Removed 'total_price' from validation. We calculate it on the server.
-            // ✅ ADD THESE FIELDS
             'phone_number'    => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
-            'pickup_time'     => 'required|date_format:H:i', // e.g., "10:30"
+            'pickup_time'     => 'required|date_format:H:i',
         ]);
 
         $startDate = Carbon::parse($validated['start_date']);
         $endDate = Carbon::parse($validated['end_date']);
         $user = Auth::user();
 
-        // Availability check
         if ($carRental->status !== 'available') {
             return response()->json(['message' => 'This car is not available for booking.'], 422);
         }
@@ -61,18 +57,17 @@ class BookingController extends Controller
         try {
             DB::beginTransaction();
 
-            // ✅ FIX: Calculate price securely on the server
             $pricePerDay = $carRental->price_per_day;
-            $totalPrice = $pricePerDay * $requestedDays; // This is the subtotal
-            $downPayment = $totalPrice * 0.5; // Calculate 50% DP
+            $totalPrice = $pricePerDay * $requestedDays;
+            $downPayment = $totalPrice * 0.5;
             $paymentDeadline = Carbon::now()->addHours(2);
 
             // 1. Create the Order
             $order = new Order([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-CAR-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $totalPrice, // ✅ FIX: Added subtotal
-                'discount_amount' => 0, // ✅ FIX: Added discount_amount
+                'subtotal' => $totalPrice,
+                'discount_amount' => 0,
                 'total_amount' => $totalPrice,
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
@@ -85,9 +80,9 @@ class BookingController extends Controller
                 'order_id' => $order->id,
                 'orderable_id' => $carRental->id,
                 'orderable_type' => CarRental::class,
-                'name' => $carRental->brand . ' ' . $carRental->car_model, // ✅ FIX: Added item name
-                'quantity' => $requestedDays, // ✅ FIX: Use calculated days
-                'price' => $pricePerDay, // ✅ FIX: Use price per day
+                'name' => $carRental->brand . ' ' . $carRental->car_model,
+                'quantity' => $requestedDays,
+                'price' => $pricePerDay,
             ]);
             $orderItem->save();
 
@@ -101,18 +96,15 @@ class BookingController extends Controller
                 'end_date' => $endDate,
                 'booking_date' => $startDate,
                 'details' => [
-                // Snapshot of the car itself
-                'service_name'  => $carRental->brand . ' ' . $carRental->car_model,
-                'car_model'     => $carRental->car_model,
-                'brand'         => $carRental->brand,
-                'price_per_day' => $carRental->price_per_day,
-                'total_days'    => $requestedDays,
-
-                // New fields from the user request
-                'phone_number'    => $validated['phone_number'],
-                'pickup_location' => $validated['pickup_location'],
-                'pickup_time'     => $validated['pickup_time'],
-            ]
+                    'service_name'  => $carRental->brand . ' ' . $carRental->car_model,
+                    'car_model'     => $carRental->car_model,
+                    'brand'         => $carRental->brand,
+                    'price_per_day' => $carRental->price_per_day,
+                    'total_days'    => $requestedDays,
+                    'phone_number'    => $validated['phone_number'],
+                    'pickup_location' => $validated['pickup_location'],
+                    'pickup_time'     => $validated['pickup_time'],
+                ]
             ]);
             $carRental->bookings()->save($booking);
 
@@ -145,7 +137,8 @@ class BookingController extends Controller
      */
     public function index()
     {
-        $bookings = Booking::with('bookable')
+        // ✅ FIXED: Added 'order' to eager loading so Frontend receives the correct Order ID
+        $bookings = Booking::with(['bookable', 'order'])
             ->where('user_id', Auth::id())
             ->latest()
             ->get();
@@ -170,7 +163,7 @@ class BookingController extends Controller
      */
     public function update(Request $request, Booking $booking)
     {
-        if ($booking->user_id !== Auth::id() /* && !Auth::user()->isAdmin() */) {
+        if ($booking->user_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -195,28 +188,16 @@ class BookingController extends Controller
         $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
 
-        // --- ✅ START: PRICE LOGIC CHANGE ---
-
-        // 1. Get the general consultation price from the settings table
         $setting = Setting::where('key', 'trip_planner_price')->first();
 
-        // 2. Check if setting exists and is valid
         if (!$setting || !is_numeric($setting->value) || $setting->value <= 0) {
             Log::error('TRIP_PLANNER_PRICE setting is not set, invalid, or zero.');
             return response()->json(['message' => 'Service is not configured. Please contact support.'], 500);
         }
 
-        // 3. Set the subtotal to this general price
         $subtotal = $setting->value;
-
-        // 4. (Important!) Save this price to the specific planner
-        // This "freezes" the price for this user's submission
         $tripPlanner->price = $subtotal;
-        // REMOVED: $tripPlanner->status = 'Approved'; // This line causes the error
         $tripPlanner->save();
-
-        // --- ✅ END: PRICE LOGIC CHANGE ---
-
 
         $discountAmount = 0;
         $discountCodeId = null;
@@ -234,7 +215,7 @@ class BookingController extends Controller
         }
 
         $totalPrice = $subtotal - $discountAmount;
-        $downPayment = $subtotal * 0.5; // DP is 50% of the *original* price
+        $downPayment = $subtotal * 0.5;
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
@@ -318,7 +299,7 @@ class BookingController extends Controller
             'pickup_location' => 'required|string|max:255',
             'flight_number' => 'nullable|string|max:50',
             'special_request' => 'nullable|string',
-            'selected_addons' => 'nullable|array', // ✅ Accept array of addon names
+            'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
         ]);
 
@@ -329,7 +310,6 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        // 1. Calculate Base Price
         $pricePerPax = $package->getPricePerPax($totalPax);
         if ($pricePerPax === null) {
             return response()->json([
@@ -338,17 +318,13 @@ class BookingController extends Controller
         }
         $baseSubtotal = $pricePerPax * $totalPax;
 
-        // 2. Calculate Add-ons
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
         if (!empty($validated['selected_addons']) && !empty($package->addons)) {
-            $availableAddons = collect($package->addons); // Convert DB JSON to collection
-
+            $availableAddons = collect($package->addons);
             foreach ($validated['selected_addons'] as $addonName) {
-                // Find the addon in the database configuration
                 $addon = $availableAddons->firstWhere('name', $addonName);
-
                 if ($addon) {
                     $price = (float) ($addon['price'] ?? 0);
                     $addonsTotal += $price;
@@ -360,10 +336,6 @@ class BookingController extends Controller
             }
         }
 
-        // 3. Apply Discount (only to base subtotal usually, but here applied to sum)
-        // Let's apply discount to the Base Subtotal only to be safe, or Total.
-        // Usually discounts don't apply to 3rd party add-ons like photography.
-        // Let's apply to Base Subtotal for better business logic.
         $discountAmount = 0;
         $discountCodeId = null;
         $discountCode = null;
@@ -373,11 +345,10 @@ class BookingController extends Controller
             if (!$discountCode || !$discountCode->isValid()) {
                 throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
-            $discountAmount = $discountCode->calculateDiscount($baseSubtotal); // Discount on base price only
+            $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
             $discountCodeId = $discountCode->id;
         }
 
-        // 4. Final Totals
         $finalSubtotal = $baseSubtotal + $addonsTotal;
         $totalPrice = $finalSubtotal - $discountAmount;
         $downPayment = $totalPrice * 0.5;
@@ -385,7 +356,6 @@ class BookingController extends Controller
 
         DB::beginTransaction();
         try {
-            // Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
@@ -398,7 +368,6 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // Create Booking
             $booking = $package->bookings()->create([
                 'user_id' => $user->id,
                 'booking_date' => $validated['start_date'],
@@ -418,13 +387,11 @@ class BookingController extends Controller
                     'pickup_location' => $validated['pickup_location'],
                     'flight_number' => $validated['flight_number'] ?? null,
                     'special_request' => $validated['special_request'] ?? null,
-
-                    // Financial Snapshot
                     'service_name' => $package->name,
                     'price_per_pax' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Save selected addons list
+                    'selected_addons' => $selectedAddonsDetails,
                     'discount_applied' => $discountAmount
                 ]
             ]);
@@ -432,21 +399,19 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            // Main Package Item
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
                 'orderable_type' => HolidayPackage::class,
                 'name' => $package->name . " ($totalPax Pax)",
-                'quantity' => 1, // Treat package group as 1 unit
+                'quantity' => 1,
                 'price' => $baseSubtotal,
             ]);
 
-            // ✅ Save Add-ons as OrderItems (Optional, but good for invoices)
             foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
-                    'orderable_id' => $package->id, // Linked to package
+                    'orderable_id' => $package->id,
                     'orderable_type' => HolidayPackage::class,
                     'name' => 'Add-on: ' . $addon['name'],
                     'quantity' => 1,
@@ -469,18 +434,14 @@ class BookingController extends Controller
         }
     }
 
-    // ✅ FIX: REMOVED the duplicate `bookActivity` function that was here.
-
     /**
      * Store a booking for an Activity.
-     *
-     * ✅ THIS IS THE CORRECT, FINAL VERSION
      */
     public function storeActivityBooking(Request $request, Activity $activity)
     {
         $validated = $request->validate([
             'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
-            'activity_time' => 'required|string', // Ensure this is validated
+            'activity_time' => 'required|string',
             'quantity' => 'required|integer|min:1',
             'participant_nationality' => 'required|string|max:100',
             'full_name' => 'required|string|max:255',
@@ -488,7 +449,7 @@ class BookingController extends Controller
             'phone_number' => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
-            'selected_addons' => 'nullable|array', // ✅ Accept array of names
+            'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
         ]);
 
@@ -499,11 +460,9 @@ class BookingController extends Controller
         $user = Auth::user();
         $totalPax = $validated['quantity'];
 
-        // 1. Base Price
         $pricePerPax = $activity->price;
         $baseSubtotal = $pricePerPax * $totalPax;
 
-        // 2. Add-ons Calculation
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
@@ -523,16 +482,14 @@ class BookingController extends Controller
             }
         }
 
-        // 3. Totals
         $finalSubtotal = $baseSubtotal + $addonsTotal;
-        $totalPrice = $finalSubtotal; // No discounts implemented for Activities yet
+        $totalPrice = $finalSubtotal;
         $downPayment = $totalPrice * 0.5;
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
             DB::beginTransaction();
 
-            // Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
@@ -544,17 +501,15 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // Main Activity Item
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $activity->id,
                 'orderable_type' => Activity::class,
                 'name' => $activity->name,
                 'quantity' => $validated['quantity'],
-                'price' => $pricePerPax, // Unit price
+                'price' => $pricePerPax,
             ]);
 
-             // ✅ Add-ons as OrderItems
              foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -566,7 +521,6 @@ class BookingController extends Controller
                 ]);
             }
 
-            // Create Booking
             $booking = $activity->bookings()->create([
                 'user_id' => $user->id,
                 'status' => 'pending',
@@ -587,7 +541,7 @@ class BookingController extends Controller
                     'price_per_person' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Save selected addons
+                    'selected_addons' => $selectedAddonsDetails,
                 ],
             ]);
 
@@ -608,9 +562,9 @@ class BookingController extends Controller
             return response()->json(['message' => 'Booking failed.'], 500);
         }
     }
+
     public function storeOpenTripBooking(Request $request, $openTripId)
     {
-        // 1. Validation
         $validated = $request->validate([
             'start_date' => 'required|date|after_or_equal:today',
             'adults' => 'required|integer|min:1',
@@ -620,7 +574,7 @@ class BookingController extends Controller
             'full_name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
             'phone_number' => 'required|string|max:20',
-            'pickup_location' => 'required|string|max:255', // Stores Meeting Point
+            'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
         ]);
 
@@ -631,9 +585,6 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        // 2. Pricing Logic
-        // For now, we use the 'starting_from_price' as the base price per person.
-        // You can enhance this later to use specific tiers from $trip->price_tiers if needed.
         $pricePerPax = $trip->starting_from_price;
 
         if (!$pricePerPax || $pricePerPax <= 0) {
@@ -642,7 +593,6 @@ class BookingController extends Controller
 
         $baseSubtotal = $pricePerPax * $totalPax;
 
-        // 3. Discount Logic
         $discountAmount = 0;
         $discountCodeId = null;
         $discountCode = null;
@@ -656,15 +606,13 @@ class BookingController extends Controller
             $discountCodeId = $discountCode->id;
         }
 
-        // 4. Totals
-        $finalSubtotal = $baseSubtotal; // Add-ons can be added here if supported in future
+        $finalSubtotal = $baseSubtotal;
         $totalPrice = $finalSubtotal - $discountAmount;
-        $downPayment = $totalPrice * 0.5; // 50% Down Payment
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
         try {
-            // A. Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-OT-' . strtoupper(Str::random(6)) . time(),
@@ -677,18 +625,15 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // B. Create Booking
             $booking = $trip->bookings()->create([
                 'user_id' => $user->id,
                 'booking_date' => $validated['start_date'],
                 'start_date' => $validated['start_date'],
-                // End date calculated based on duration
                 'end_date' => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(),
                 'status' => 'pending',
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
-                    // User Info
                     'full_name' => $validated['full_name'],
                     'email' => $validated['email'],
                     'phone_number' => $validated['phone_number'],
@@ -696,10 +641,8 @@ class BookingController extends Controller
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
-                    'pickup_location' => $validated['pickup_location'], // Meeting Point
+                    'pickup_location' => $validated['pickup_location'],
                     'special_request' => $validated['special_request'] ?? null,
-
-                    // Financial Snapshot
                     'service_name' => $trip->name,
                     'price_per_pax' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
@@ -707,11 +650,9 @@ class BookingController extends Controller
                 ]
             ]);
 
-            // Link Order to Booking
             $order->booking_id = $booking->id;
             $order->save();
 
-            // C. Create Order Item
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $trip->id,
