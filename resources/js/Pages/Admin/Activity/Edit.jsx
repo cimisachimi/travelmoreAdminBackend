@@ -11,6 +11,8 @@ import { ArrowLeft, Trash2, Upload, Save, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import React from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/Components/ui/alert-dialog";
+// ✅ Import AddonsRepeater
+import AddonsRepeater from "@/Pages/Admin/Components/AddonsRepeater";
 
 function TranslationForm({ locale, data, errors, onChange }) {
     return (
@@ -31,6 +33,7 @@ function EditActivityForm({ activity, errors }) {
         price: activity.price || 0,
         status: activity.status || "active",
         duration: activity.duration || "",
+        addons: activity.addons || [], // ✅ Load existing addons
         translations: {
             en: { name: activity.translations.en?.name || "", description: activity.translations.en?.description || "", location: activity.translations.en?.location || "", category: activity.translations.en?.category || "" },
             id: { name: activity.translations.id?.name || "", description: activity.translations.id?.description || "", location: activity.translations.id?.location || "", category: activity.translations.id?.category || "" },
@@ -58,9 +61,22 @@ function EditActivityForm({ activity, errors }) {
                     <CardHeader><CardTitle>Activity Details</CardTitle></CardHeader>
                     <CardContent>
                         <Tabs defaultValue="en">
-                            <TabsList className="grid w-full grid-cols-2 mb-4"><TabsTrigger value="en">English (EN)</TabsTrigger><TabsTrigger value="id">Indonesian (ID)</TabsTrigger></TabsList>
+                            <TabsList className="grid w-full grid-cols-3 mb-4">
+                                <TabsTrigger value="en">English</TabsTrigger>
+                                <TabsTrigger value="id">Indonesian</TabsTrigger>
+                                <TabsTrigger value="addons">Add-ons</TabsTrigger> {/* ✅ Add-ons Tab */}
+                            </TabsList>
                             <TabsContent value="en" className="mt-4"><TranslationForm locale="en" data={data.translations.en} errors={errors} onChange={handleTranslationChange} /></TabsContent>
                             <TabsContent value="id" className="mt-4"><TranslationForm locale="id" data={data.translations.id} errors={errors} onChange={handleTranslationChange} /></TabsContent>
+
+                            {/* ✅ Add-ons Content */}
+                            <TabsContent value="addons" className="mt-4">
+                                <AddonsRepeater
+                                    items={data.addons}
+                                    setData={setData}
+                                    errors={errors}
+                                />
+                            </TabsContent>
                         </Tabs>
                     </CardContent>
                 </Card>
@@ -83,6 +99,7 @@ function EditActivityForm({ activity, errors }) {
     );
 }
 
+// ... [ThumbnailManager and GalleryManager remain unchanged] ...
 const ThumbnailManager = ({ activity, errors }) => {
     const { processing } = useForm();
     const handleFileChange = (e) => {

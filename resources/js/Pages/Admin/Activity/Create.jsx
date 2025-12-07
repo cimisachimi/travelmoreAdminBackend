@@ -11,22 +11,25 @@ import { ArrowLeft, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
+// ✅ Import AddonsRepeater
+import AddonsRepeater from "@/Pages/Admin/Components/AddonsRepeater";
 
 export default function Create({ auth }) {
     const { data, setData, post, processing, errors } = useForm({
         is_active: false,
         price: 0,
-        status: "active", // Legacy field, can keep for backend compatibility
+        status: "active",
         duration: "",
         thumbnail: null,
         gallery: [],
+        addons: [], // ✅ Initialize Addons
         translations: {
             en: { name: "", description: "", location: "", category: "" },
             id: { name: "", description: "", location: "", category: "" },
         },
     });
 
-    // --- Thumbnail Logic ---
+    // ... [Thumbnail & Gallery Logic remains the same] ...
     const [thumbnailPreview, setThumbnailPreview] = useState(null);
     const onThumbnailDrop = (acceptedFiles) => {
         const file = acceptedFiles[0];
@@ -35,7 +38,6 @@ export default function Create({ auth }) {
     const removeThumbnail = () => { setThumbnailPreview(null); setData("thumbnail", null); };
     const { getRootProps: getThumbnailRootProps, getInputProps: getThumbnailInputProps, isDragActive: isThumbnailDragActive } = useDropzone({ onDrop: onThumbnailDrop, accept: { "image/*": [".jpeg", ".jpg", ".png", ".webp"] }, multiple: false });
 
-    // --- Gallery Logic ---
     const [galleryPreviews, setGalleryPreviews] = useState([]);
     const onGalleryDrop = (acceptedFiles) => {
         const newFiles = acceptedFiles.map((file) => Object.assign(file, { preview: URL.createObjectURL(file) }));
@@ -77,12 +79,14 @@ export default function Create({ auth }) {
                     </Card>
 
                     <Tabs defaultValue="core" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
+                        <TabsList className="grid w-full grid-cols-3">
                             <TabsTrigger value="core">Core Details & Images</TabsTrigger>
                             <TabsTrigger value="translations">Translations</TabsTrigger>
+                            <TabsTrigger value="addons">Add-ons</TabsTrigger> {/* ✅ New Tab */}
                         </TabsList>
 
                         <TabsContent value="core" className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+                             {/* ... [Core Details & Images Content remains the same] ... */}
                              <div className="lg:col-span-2 space-y-6">
                                 <Card>
                                     <CardHeader><CardTitle>Basic Info</CardTitle></CardHeader>
@@ -162,6 +166,23 @@ export default function Create({ auth }) {
                                         <TabsContent value="en" className="space-y-4"><TranslationForm locale="en" data={data.translations.en} errors={errors} onChange={handleTranslationChange} /></TabsContent>
                                         <TabsContent value="id" className="space-y-4"><TranslationForm locale="id" data={data.translations.id} errors={errors} onChange={handleTranslationChange} /></TabsContent>
                                     </Tabs>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        {/* ✅ Add-ons Content */}
+                        <TabsContent value="addons" className="mt-4">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Optional Add-ons</CardTitle>
+                                    <CardDescription>Configure extra services customers can select.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <AddonsRepeater
+                                        items={data.addons}
+                                        setData={setData}
+                                        errors={errors}
+                                    />
                                 </CardContent>
                             </Card>
                         </TabsContent>

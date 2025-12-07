@@ -484,6 +484,7 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
+            // Item 1: Main Activity
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $activity->id,
@@ -493,7 +494,7 @@ class BookingController extends Controller
                 'price' => $pricePerPax,
             ]);
 
-             // ✅ Add-ons
+             // ✅ Items 2+: Add-ons
              foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -525,7 +526,7 @@ class BookingController extends Controller
                     'price_per_person' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved in JSON
                 ],
             ]);
 

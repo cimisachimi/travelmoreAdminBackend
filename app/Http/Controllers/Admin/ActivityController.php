@@ -17,7 +17,7 @@ class ActivityController extends Controller
     {
         $query = Activity::with('translations');
 
-        // ✅ ADD: Search Logic
+        // Search Logic
         if ($request->input('search')) {
             $search = $request->input('search');
             $query->whereTranslationLike('name', "%{$search}%")
@@ -42,13 +42,21 @@ class ActivityController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'is_active' => 'boolean', // ✅ Added
+            'is_active' => 'boolean',
             'price' => 'required|numeric|min:0',
             'status' => 'nullable|string',
             'duration' => 'nullable|string|max:255',
+
+            // ✅ Add-ons Validation
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string|max:255',
+            'addons.*.price' => 'required|numeric|min:0',
+
             'thumbnail' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
             'gallery' => 'nullable|array',
             'gallery.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
+
+            // Translations
             'translations' => 'required|array',
             'translations.en.name' => 'required|string|max:255',
             'translations.en.description' => 'nullable|string',
@@ -68,6 +76,7 @@ class ActivityController extends Controller
                 'price' => $validated['price'],
                 'status' => $validated['status'] ?? 'active',
                 'duration' => $validated['duration'],
+                'addons' => $request->addons ?? [], // ✅ Save Add-ons
             ]);
 
             $this->updateTranslations($activity, $validated['translations']);
@@ -100,6 +109,8 @@ class ActivityController extends Controller
 
         // Ensure is_active is boolean
         $activityData['is_active'] = (bool) $activity->is_active;
+        // Ensure addons is array
+        $activityData['addons'] = $activity->addons ?? [];
 
         $activityData['translations'] = [
             'en' => $translations['en'] ?? (object)[],
@@ -114,10 +125,16 @@ class ActivityController extends Controller
     public function update(Request $request, Activity $activity)
     {
         $validated = $request->validate([
-            'is_active' => 'boolean', // ✅ Added
+            'is_active' => 'boolean',
             'price' => 'required|numeric|min:0',
             'status' => 'nullable|string',
             'duration' => 'nullable|string|max:255',
+
+            // ✅ Add-ons Validation
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string|max:255',
+            'addons.*.price' => 'required|numeric|min:0',
+
             'translations' => 'required|array',
             'translations.en.name' => 'required|string|max:255',
             'translations.en.description' => 'nullable|string',
@@ -133,10 +150,11 @@ class ActivityController extends Controller
             DB::beginTransaction();
 
             $activity->update([
-                'is_active' => $validated['is_active'],
+                'is_active' => $request->boolean('is_active'), // Explicit boolean check
                 'price' => $validated['price'],
                 'status' => $validated['status'] ?? 'active',
                 'duration' => $validated['duration'],
+                'addons' => $request->addons ?? [], // ✅ Update Add-ons
             ]);
 
             $this->updateTranslations($activity, $validated['translations']);
@@ -168,6 +186,7 @@ class ActivityController extends Controller
     }
 
     // --- Image Methods ---
+
     public function updateThumbnail(Request $request, Activity $activity)
     {
         $request->validate(['thumbnail' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048']);

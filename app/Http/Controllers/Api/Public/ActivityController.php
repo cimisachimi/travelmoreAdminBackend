@@ -18,7 +18,7 @@ class ActivityController extends Controller
         $locale = $request->header('Accept-Language', config('app.fallback_locale'));
 
         // Eager load translations and images
-        // ✅ ADDED: where('is_active', true)
+        // ✅ ADDED: where('is_active', true) to show only published
         $activities = Activity::with(['translations', 'images'])
             ->where('is_active', true)
             ->latest()
@@ -35,8 +35,8 @@ class ActivityController extends Controller
             $activity->location = $translation->location ?? null;
             $activity->category = $translation->category ?? null;
 
-            // Use accessors for image URLs (already defined in your Activity model)
-            // thumbnail_url and images_url are appended automatically
+            // ✅ ENSURE ADDONS IS ARRAY
+            $activity->addons = $activity->addons ?? [];
 
             // Remove the raw relations to avoid redundant data
             unset($activity->translations);
@@ -71,8 +71,8 @@ class ActivityController extends Controller
         $activity->location = $translation->location ?? null;
         $activity->category = $translation->category ?? null;
 
-        // Use accessors for image URLs (already defined in your Activity model)
-        // thumbnail_url and images_url are appended automatically
+        // ✅ ENSURE ADDONS IS ARRAY
+        $activity->addons = $activity->addons ?? [];
 
         // Remove the raw relations to avoid redundant data
         unset($activity->translations);
