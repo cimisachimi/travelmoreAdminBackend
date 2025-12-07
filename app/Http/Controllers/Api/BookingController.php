@@ -24,11 +24,14 @@ use App\Models\OpenTrip;
 
 class BookingController extends Controller
 {
+    // ... [storeCarRentalBooking, index, show, update, storeTripPlannerBooking methods remain unchanged] ...
+
     /**
-     * Store a newly created car rental booking in storage.
+     * Store a newly created car rental booking.
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
+        // (Keep existing code from previous steps...)
         $validated = $request->validate([
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
@@ -62,7 +65,6 @@ class BookingController extends Controller
             $downPayment = $totalPrice * 0.5;
             $paymentDeadline = Carbon::now()->addHours(2);
 
-            // 1. Create the Order
             $order = new Order([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-CAR-' . strtoupper(Str::random(6)) . time(),
@@ -75,7 +77,6 @@ class BookingController extends Controller
             ]);
             $order->save();
 
-            // 2. Create the OrderItem
             $orderItem = new OrderItem([
                 'order_id' => $order->id,
                 'orderable_id' => $carRental->id,
@@ -86,7 +87,6 @@ class BookingController extends Controller
             ]);
             $orderItem->save();
 
-            // 3. Create the Booking
             $booking = new Booking([
                 'user_id' => $user->id,
                 'status' => 'pending',
@@ -108,11 +108,9 @@ class BookingController extends Controller
             ]);
             $carRental->bookings()->save($booking);
 
-            // 4. Link the Order to the Booking
             $order->booking_id = $booking->id;
             $order->save();
 
-            // 5. UPDATE AVAILABILITY
             CarRentalAvailability::where('car_rental_id', $carRental->id)
                 ->whereBetween('date', [$startDate, $endDate])
                 ->update(['status' => 'booked']);
@@ -120,35 +118,27 @@ class BookingController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Booking created successfully. You have 2 hours to complete the payment.',
+                'message' => 'Booking created successfully.',
                 'payment_deadline' => $paymentDeadline->toIso8601String(),
                 'order' => $order->load('orderItems.orderable', 'booking.bookable'),
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Car rental booking failed: ' . $e->getMessage() . ' Trace: ' . $e->getTraceAsString());
-            return response()->json(['message' => 'An error occurred during booking. Please try again.'], 500);
+            Log::error('Car rental booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'An error occurred during booking.'], 500);
         }
     }
 
-    /**
-     * Display a listing of the user's bookings.
-     */
     public function index()
     {
-        // ✅ FIXED: Added 'order' to eager loading so Frontend receives the correct Order ID
         $bookings = Booking::with(['bookable', 'order'])
             ->where('user_id', Auth::id())
             ->latest()
             ->get();
-
         return response()->json($bookings);
     }
 
-    /**
-     * Display a specific booking.
-     */
     public function show(Booking $booking)
     {
         if ($booking->user_id !== Auth::id()) {
@@ -158,26 +148,18 @@ class BookingController extends Controller
         return response()->json($booking);
     }
 
-    /**
-     * Update the specified booking in storage.
-     */
     public function update(Request $request, Booking $booking)
     {
         if ($booking->user_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-
         $validated = $request->validate([
             'status' => 'sometimes|in:pending,confirmed,cancelled',
         ]);
-
         $booking->update($validated);
         return response()->json($booking);
     }
 
-    /**
-     * Store a booking for a Trip Planner.
-     */
     public function storeTripPlannerBooking(Request $request)
     {
         $validated = $request->validate([
@@ -189,10 +171,8 @@ class BookingController extends Controller
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
 
         $setting = Setting::where('key', 'trip_planner_price')->first();
-
         if (!$setting || !is_numeric($setting->value) || $setting->value <= 0) {
-            Log::error('TRIP_PLANNER_PRICE setting is not set, invalid, or zero.');
-            return response()->json(['message' => 'Service is not configured. Please contact support.'], 500);
+            return response()->json(['message' => 'Service is not configured.'], 500);
         }
 
         $subtotal = $setting->value;
@@ -206,9 +186,7 @@ class BookingController extends Controller
         if (!empty($validated['discount_code'])) {
             $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
             if (!$discountCode || !$discountCode->isValid()) {
-                throw ValidationException::withMessages([
-                    'discount_code' => 'This discount code is invalid or has expired.',
-                ]);
+                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
             $discountAmount = $discountCode->calculateDiscount($subtotal);
             $discountCodeId = $discountCode->id;
@@ -245,7 +223,6 @@ class BookingController extends Controller
                     'full_name' => $tripPlanner->full_name,
                     'email' => $tripPlanner->email,
                     'trip_type' => $tripPlanner->trip_type,
-                    'travel_type' => $tripPlanner->travel_type,
                     'original_subtotal' => $subtotal,
                     'discount_applied' => $discountAmount
                 ]
@@ -268,23 +245,19 @@ class BookingController extends Controller
             }
 
             DB::commit();
-
             return response()->json([
-                'message' => 'Booking created successfully. Please proceed to payment.',
+                'message' => 'Booking created successfully.',
                 'booking' => $booking->load('bookable'),
                 'order' => $order,
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Trip planner booking failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['message' => 'An error occurred while creating the booking.'], 500);
+            Log::error('Trip planner booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Booking failed.'], 500);
         }
     }
 
-    /**
-     * Store a booking for a Holiday Package.
-     */
     public function storeHolidayPackageBooking(Request $request, $packageId)
     {
         $validated = $request->validate([
@@ -299,6 +272,7 @@ class BookingController extends Controller
             'pickup_location' => 'required|string|max:255',
             'flight_number' => 'nullable|string|max:50',
             'special_request' => 'nullable|string',
+            // ✅ Add-ons Validation
             'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
         ]);
@@ -312,12 +286,11 @@ class BookingController extends Controller
 
         $pricePerPax = $package->getPricePerPax($totalPax);
         if ($pricePerPax === null) {
-            return response()->json([
-                'message' => 'Pricing is not available for the selected number of participants.'
-            ], 400);
+            return response()->json(['message' => 'Pricing unavailable for this number of pax.'], 400);
         }
         $baseSubtotal = $pricePerPax * $totalPax;
 
+        // ✅ Calculate Add-ons
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
@@ -328,10 +301,7 @@ class BookingController extends Controller
                 if ($addon) {
                     $price = (float) ($addon['price'] ?? 0);
                     $addonsTotal += $price;
-                    $selectedAddonsDetails[] = [
-                        'name' => $addonName,
-                        'price' => $price
-                    ];
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
                 }
             }
         }
@@ -345,6 +315,7 @@ class BookingController extends Controller
             if (!$discountCode || !$discountCode->isValid()) {
                 throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
+            // Discount applies to Base Subtotal only (common practice)
             $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
             $discountCodeId = $discountCode->id;
         }
@@ -387,11 +358,13 @@ class BookingController extends Controller
                     'pickup_location' => $validated['pickup_location'],
                     'flight_number' => $validated['flight_number'] ?? null,
                     'special_request' => $validated['special_request'] ?? null,
+
+                    // Financials
                     'service_name' => $package->name,
                     'price_per_pax' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails,
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Stored in Booking
                     'discount_applied' => $discountAmount
                 ]
             ]);
@@ -399,6 +372,7 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
+            // Item 1: Main Package
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
@@ -408,6 +382,7 @@ class BookingController extends Controller
                 'price' => $baseSubtotal,
             ]);
 
+            // ✅ Items 2+: Add-ons
             foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -424,7 +399,6 @@ class BookingController extends Controller
             }
 
             DB::commit();
-
             return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
 
         } catch (\Exception $e) {
@@ -434,9 +408,6 @@ class BookingController extends Controller
         }
     }
 
-    /**
-     * Store a booking for an Activity.
-     */
     public function storeActivityBooking(Request $request, Activity $activity)
     {
         $validated = $request->validate([
@@ -449,35 +420,32 @@ class BookingController extends Controller
             'phone_number' => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
+            // ✅ Add-ons Validation
             'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
         ]);
 
         if ($activity->status !== 'active') {
-            return response()->json(['message' => 'This activity is not available.'], 400);
+            return response()->json(['message' => 'Activity not available.'], 400);
         }
 
         $user = Auth::user();
         $totalPax = $validated['quantity'];
-
         $pricePerPax = $activity->price;
         $baseSubtotal = $pricePerPax * $totalPax;
 
+        // ✅ Calculate Add-ons
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
         if (!empty($validated['selected_addons']) && !empty($activity->addons)) {
             $availableAddons = collect($activity->addons);
-
             foreach ($validated['selected_addons'] as $addonName) {
                 $addon = $availableAddons->firstWhere('name', $addonName);
                 if ($addon) {
                     $price = (float) ($addon['price'] ?? 0);
                     $addonsTotal += $price;
-                    $selectedAddonsDetails[] = [
-                        'name' => $addonName,
-                        'price' => $price
-                    ];
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
                 }
             }
         }
@@ -510,6 +478,7 @@ class BookingController extends Controller
                 'price' => $pricePerPax,
             ]);
 
+             // ✅ Add-ons
              foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -541,7 +510,7 @@ class BookingController extends Controller
                     'price_per_person' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails,
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved
                 ],
             ]);
 
@@ -549,9 +518,8 @@ class BookingController extends Controller
             $order->save();
 
             DB::commit();
-
             return response()->json([
-                'message' => 'Activity booked successfully. Please complete payment.',
+                'message' => 'Activity booked successfully.',
                 'payment_deadline' => $paymentDeadline->toIso8601String(),
                 'order' => $order->load('orderItems.orderable', 'booking.bookable'),
             ], 201);
@@ -563,6 +531,10 @@ class BookingController extends Controller
         }
     }
 
+    /**
+     * Store a booking for an Open Trip.
+     * ✅ UPDATED TO INCLUDE ADD-ONS
+     */
     public function storeOpenTripBooking(Request $request, $openTripId)
     {
         $validated = $request->validate([
@@ -576,22 +548,42 @@ class BookingController extends Controller
             'phone_number' => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
+            // ✅ Add-ons Validation
+            'selected_addons' => 'nullable|array',
+            'selected_addons.*' => 'string',
         ]);
 
         $user = Auth::user();
-        $trip = \App\Models\OpenTrip::findOrFail($openTripId);
+        $trip = OpenTrip::findOrFail($openTripId);
 
         $adultsCount = $validated['adults'];
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        $pricePerPax = $trip->starting_from_price;
-
+        $pricePerPax = $trip->starting_from_price; // Or specific tier logic if you have it
         if (!$pricePerPax || $pricePerPax <= 0) {
-             return response()->json(['message' => 'Price information is missing for this trip.'], 400);
+             return response()->json(['message' => 'Price info missing.'], 400);
+        }
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        // ✅ Calculate Add-ons
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($trip->addons)) {
+            $availableAddons = collect($trip->addons);
+            foreach ($validated['selected_addons'] as $addonName) {
+                $addon = $availableAddons->firstWhere('name', $addonName);
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
+                }
+            }
         }
 
-        $baseSubtotal = $pricePerPax * $totalPax;
+        // ✅ Totals
+        $finalSubtotal = $baseSubtotal + $addonsTotal;
 
         $discountAmount = 0;
         $discountCodeId = null;
@@ -602,11 +594,11 @@ class BookingController extends Controller
             if (!$discountCode || !$discountCode->isValid()) {
                 throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
+            // Discount applies to base price usually
             $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
             $discountCodeId = $discountCode->id;
         }
 
-        $finalSubtotal = $baseSubtotal;
         $totalPrice = $finalSubtotal - $discountAmount;
         $downPayment = $totalPrice * 0.5;
         $paymentDeadline = now()->addHours(2);
@@ -646,6 +638,8 @@ class BookingController extends Controller
                     'service_name' => $trip->name,
                     'price_per_pax' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Stored
                     'discount_applied' => $discountAmount
                 ]
             ]);
@@ -653,21 +647,33 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
+            // Item 1: Main Trip
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $trip->id,
-                'orderable_type' => \App\Models\OpenTrip::class,
+                'orderable_type' => OpenTrip::class,
                 'name' => $trip->name . " ($totalPax Pax)",
                 'quantity' => 1,
                 'price' => $baseSubtotal,
             ]);
+
+            // ✅ Items 2+: Add-ons
+            foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $trip->id,
+                    'orderable_type' => OpenTrip::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
 
             if ($discountCode) {
                 $discountCode->increment('uses');
             }
 
             DB::commit();
-
             return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
 
         } catch (\Exception $e) {

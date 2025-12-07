@@ -59,6 +59,11 @@ class OpenTripController extends Controller
             'includes' => 'nullable|array',
             'excludes' => 'nullable|array',
 
+            // ✅ Addons Validation
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string',
+            'addons.*.price' => 'required|numeric',
+
             'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
         ]);
 
@@ -70,7 +75,7 @@ class OpenTripController extends Controller
             ];
 
             $data = [
-                'is_active' => $validated['is_active'] ?? false, // ✅ Safe fallback
+                'is_active' => $validated['is_active'] ?? false,
                 'duration' => $validated['duration'],
                 'rating' => $validated['rating'],
                 'map_url' => $validated['map_url'],
@@ -78,6 +83,7 @@ class OpenTripController extends Controller
                 'meeting_points' => $request->meeting_points,
                 'itinerary' => $request->itinerary,
                 'cost' => $cost,
+                'addons' => $request->addons ?? [], // ✅ Save addons
 
                 // Translations
                 'en' => $validated['en'],
@@ -116,7 +122,7 @@ class OpenTripController extends Controller
 
         return Inertia::render('Admin/OpenTrip/Edit', [
             'openTrip' => $openTrip,
-            'initialCost' => $cost // Pass separated cost structure
+            'initialCost' => $cost
         ]);
     }
 
@@ -142,6 +148,11 @@ class OpenTripController extends Controller
             'itinerary' => 'nullable|array',
             'includes' => 'nullable|array',
             'excludes' => 'nullable|array',
+
+            // ✅ Addons Validation
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string',
+            'addons.*.price' => 'required|numeric',
         ]);
 
         DB::beginTransaction();
@@ -152,7 +163,7 @@ class OpenTripController extends Controller
             ];
 
             $openTrip->update([
-                'is_active' => $validated['is_active'] ?? false, // ✅ FIXED: Added '?? false' fallback
+                'is_active' => $validated['is_active'] ?? false,
                 'duration' => $validated['duration'],
                 'rating' => $validated['rating'],
                 'map_url' => $validated['map_url'],
@@ -160,6 +171,7 @@ class OpenTripController extends Controller
                 'meeting_points' => $request->meeting_points,
                 'itinerary' => $request->itinerary,
                 'cost' => $cost,
+                'addons' => $request->addons ?? [], // ✅ Update addons
                 'en' => $validated['en'],
                 'id' => $validated['id'],
             ]);

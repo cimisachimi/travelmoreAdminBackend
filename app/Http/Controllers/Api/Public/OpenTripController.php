@@ -43,7 +43,7 @@ class OpenTripController extends Controller
         $priceTiers = is_string($trip->price_tiers) ? json_decode($trip->price_tiers, true) : $trip->price_tiers;
 
         $startingPrice = collect($priceTiers)->min('price') ?? 0;
-
+        $addons = is_string($trip->addons) ? json_decode($trip->addons, true) : $trip->addons;
         return [
             'id' => $trip->id,
             'name' => $trip->name,
@@ -61,6 +61,7 @@ class OpenTripController extends Controller
             'itinerary_details' => $itinerary ?? [],
             'includes' => $cost['included'] ?? [],
             'excludes' => $cost['excluded'] ?? [],
+            'addons' => $addons ?? [], // ✅ ADDED: Send addons to frontend
         ];
     }
 }

@@ -22,7 +22,8 @@ class OpenTrip extends Model implements TranslatableContract
         'price_tiers',
         'itinerary',
         'cost',
-        'meeting_points'
+        'meeting_points',
+        'addons', // ✅ Add this
     ];
 
     protected $casts = [
@@ -32,6 +33,7 @@ class OpenTrip extends Model implements TranslatableContract
         'itinerary' => 'array',
         'cost' => 'array',
         'meeting_points' => 'array',
+        'addons' => 'array', // ✅ Add this
     ];
 
     // ✅ FIXED: Added 'starting_from_price' so it's sent to the frontend
