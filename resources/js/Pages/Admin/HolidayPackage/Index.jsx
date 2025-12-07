@@ -299,14 +299,13 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                 )}
               </TableBody>
             </Table>
-          </CardContent>
 
-          {/* Pagination Footer */}
-          {packages.links && packages.meta && packages.meta.last_page > 1 && (
+            {/* ✅ FIXED PAGINATION: Uses standard 'links' directly, just like OpenTrip/Index.jsx */}
             <div className="p-4 border-t bg-gray-50/50 dark:bg-gray-900/20">
-              <Pagination links={packages.links} />
+                <Pagination links={packages.links} />
             </div>
-          )}
+
+          </CardContent>
         </Card>
       </div>
     </AuthenticatedLayout>

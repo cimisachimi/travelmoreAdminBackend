@@ -6,12 +6,14 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import { Textarea } from "@/Components/ui/textarea";
 import InputError from "@/Components/InputError";
-import Checkbox from "@/Components/Checkbox"; // ✅ Added Checkbox Import
+import Checkbox from "@/Components/Checkbox";
 import { ArrowLeft, Upload, Package, Clock, DollarSign, Star, MapPin, Plus, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import React, { useState } from "react";
 import { toast } from 'sonner';
 import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater';
+// ✅ Import AddonsRepeater
+import AddonsRepeater from "@/Pages/Admin/Components/AddonsRepeater";
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -373,6 +375,9 @@ export default function CreateHolidayPackage({ auth }) {
     faqs: [],
     trip_info: [],
 
+    // ✅ Initialize Add-ons
+    addons: [],
+
     // Translations
     name: { en: '', id: '' },
     description: { en: '', id: '' },
@@ -440,10 +445,11 @@ export default function CreateHolidayPackage({ auth }) {
             </Card>
 
             <Tabs defaultValue="core" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="core">Core Details</TabsTrigger>
                 <TabsTrigger value="translations">Translations</TabsTrigger>
                 <TabsTrigger value="structured">Structured Data</TabsTrigger>
+                <TabsTrigger value="addons">Add-ons</TabsTrigger> {/* ✅ NEW TAB */}
                 <TabsTrigger value="images">Images</TabsTrigger>
               </TabsList>
 
@@ -527,6 +533,23 @@ export default function CreateHolidayPackage({ auth }) {
                     <CardContent><TripInfoRepeater items={data.trip_info} setData={setData} errors={errors} /></CardContent>
                   </Card>
                 </div>
+              </TabsContent>
+
+              {/* ✅ NEW: Add-ons Tab */}
+              <TabsContent value="addons">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Optional Add-ons</CardTitle>
+                        <CardDescription>Configure extra services customers can select.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AddonsRepeater
+                            items={data.addons}
+                            setData={setData}
+                            errors={errors}
+                        />
+                    </CardContent>
+                </Card>
               </TabsContent>
 
               {/* Images Tab */}

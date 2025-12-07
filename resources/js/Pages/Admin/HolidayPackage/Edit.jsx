@@ -6,11 +6,11 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import { Textarea } from "@/Components/ui/textarea";
 import InputError from "@/Components/InputError";
-import Checkbox from "@/Components/Checkbox"; // ✅ Added Checkbox Import
+import Checkbox from "@/Components/Checkbox";
 import {
   ArrowLeft, Upload, Trash2, Plus, Save,
   MapPin, Clock, Star, Languages, Layers,
-  Image as ImageIcon, ListChecks, DollarSign, HelpCircle, Info, CheckCircle2, AlertCircle
+  Image as ImageIcon, ListChecks, DollarSign, HelpCircle, Info, CheckCircle2, AlertCircle, Tag
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import { Badge } from "@/Components/ui/badge";
@@ -19,6 +19,8 @@ import { ScrollArea } from "@/Components/ui/scroll-area";
 import React, { useEffect, useState } from "react";
 import { toast } from 'sonner';
 import { PriceTiersRepeater } from '@/Pages/Admin/HolidayPackage/PriceTiersRepeater';
+// ✅ Import AddonsRepeater
+import AddonsRepeater from "@/Pages/Admin/Components/AddonsRepeater";
 
 // --- UTILS ---
 const cn = (...classes) => classes.filter(Boolean).join(' ');
@@ -165,7 +167,6 @@ const EditPackageForm = ({ pkg }) => {
   const getTrans = (locale, field) => pkg.translations?.[locale]?.[field] || '';
 
   const { data, setData, post, processing, errors, isDirty } = useForm({
-    // ✅ Include is_active in useForm
     is_active: Boolean(pkg.is_active),
 
     duration: pkg.duration || '',
@@ -176,6 +177,9 @@ const EditPackageForm = ({ pkg }) => {
     cost: safeParseJson(pkg.cost, { included: [], excluded: [] }),
     faqs: safeParseJson(pkg.faqs, []),
     trip_info: safeParseJson(pkg.trip_info, []),
+    // ✅ Parse Add-ons
+    addons: safeParseJson(pkg.addons, []),
+
     name: { en: getTrans('en', 'name'), id: getTrans('id', 'name') },
     description: { en: getTrans('en', 'description'), id: getTrans('id', 'description') },
     location: { en: getTrans('en', 'location'), id: getTrans('id', 'location') },
@@ -252,6 +256,7 @@ const EditPackageForm = ({ pkg }) => {
                         { id: 'section-pricing', icon: DollarSign, label: 'Pricing Tiers' },
                         { id: 'section-itinerary', icon: MapPin, label: 'Itinerary' },
                         { id: 'section-cost', icon: ListChecks, label: 'Inclusions' },
+                        { id: 'section-addons', icon: Tag, label: 'Add-ons' }, // ✅ Add-ons Link
                         { id: 'section-faq', icon: HelpCircle, label: 'FAQs' },
                     ].map(item => (
                         <Button
@@ -270,9 +275,9 @@ const EditPackageForm = ({ pkg }) => {
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 space-y-8 w-full pb-24"> {/* Added pb-24 for footer space */}
+        <div className="flex-1 space-y-8 w-full pb-24">
 
-            {/* ✅ Publish / Draft Toggle Card */}
+            {/* Publish / Draft Toggle Card */}
             <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20">
                 <CardContent className="pt-6">
                     <div className="flex items-center gap-2">
@@ -443,7 +448,24 @@ const EditPackageForm = ({ pkg }) => {
                 </div>
             </section>
 
-             {/* 6. FAQS */}
+            {/* ✅ 6. ADD-ONS */}
+            <section id="section-addons" className="space-y-4 scroll-mt-24">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                    <Tag className="text-primary" />
+                    <h3 className="text-xl font-bold">Add-ons</h3>
+                </div>
+                <Card>
+                    <CardContent className="pt-6">
+                        <AddonsRepeater
+                            items={data.addons}
+                            setData={setData}
+                            errors={errors}
+                        />
+                    </CardContent>
+                </Card>
+            </section>
+
+             {/* 7. FAQS */}
             <section id="section-faq" className="space-y-4 scroll-mt-24">
                 <div className="flex justify-between items-center pb-2 border-b">
                     <div className="flex items-center gap-2">

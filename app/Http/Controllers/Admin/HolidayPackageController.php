@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Arr;
-use Inertia\Inertia; // Import Inertia facade
+use Inertia\Inertia;
 use Illuminate\Validation\ValidationException;
 
 class HolidayPackageController extends Controller
@@ -17,7 +17,7 @@ class HolidayPackageController extends Controller
     /**
      * Display a listing of the resource.
      */
-public function index(Request $request)
+    public function index(Request $request)
     {
         $query = HolidayPackage::with('images');
 
@@ -27,7 +27,6 @@ public function index(Request $request)
                   ->orWhereTranslationLike('location', "%{$search}%");
         }
 
-        // You might want to show status in the dashboard list
         $packages = $query->latest()
             ->paginate(10)
             ->withQueryString();
@@ -59,6 +58,9 @@ public function index(Request $request)
         $packageData = $holidayPackage->toArray();
         $packageData['translations'] = $holidayPackage->getTranslationsArray();
 
+        // Ensure is_active is boolean for the frontend
+        $packageData['is_active'] = (bool) $holidayPackage->is_active;
+
         return Inertia::render('Admin/HolidayPackage/Edit', [
             'package' => $packageData,
             'successMessage' => session('success'),
@@ -69,16 +71,23 @@ public function index(Request $request)
     public function store(Request $request)
     {
         $validatedData = $request->validate([
-            'is_active' => 'boolean', // ✅ Validation for status
+            'is_active' => 'boolean',
 
             // --- Non-translated ---
             'duration' => 'required|integer|min:1',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
+
+            // ✅ Price Tiers Validation
             'price_tiers' => 'required|array|min:1',
             'price_tiers.*.min_pax' => 'required|integer|min:1',
             'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
             'price_tiers.*.price' => 'required|numeric|min:0',
+
+            // ✅ Add-ons Validation
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string|max:255',
+            'addons.*.price' => 'required|numeric|min:0',
 
             // --- Arrays ---
             'itinerary' => 'nullable|array',
@@ -114,7 +123,7 @@ public function index(Request $request)
 
         DB::beginTransaction();
         try {
-            // ✅ FIX: Separate translation fields from main fields
+            // Separate translation fields from main fields
             $translationFields = ['name', 'description', 'location', 'category'];
             $translationData = [];
 
@@ -129,6 +138,11 @@ public function index(Request $request)
             // Remove translation arrays and images from main package data
             $packageData = Arr::except($validatedData, array_merge(['images'], $translationFields));
 
+            // ✅ FIX: Explicitly handle is_active and addons
+            // Use $request->boolean() to safely handle "on", "1", "true", or missing checks
+            $packageData['is_active'] = $request->boolean('is_active');
+            $packageData['addons'] = $request->addons ?? [];
+
             // Create the HolidayPackage (Main Table)
             $package = HolidayPackage::create($packageData);
 
@@ -140,9 +154,14 @@ public function index(Request $request)
 
             // Handle Image Uploads
             if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $imageFile) {
+                foreach ($request->file('images') as $index => $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
-                    $package->images()->create(['url' => $path]);
+                    // Set first image as thumbnail by default
+                    $type = $index === 0 ? 'thumbnail' : 'gallery';
+                    $package->images()->create([
+                        'url' => $path,
+                        'type' => $type
+                    ]);
                 }
             }
 
@@ -159,20 +178,28 @@ public function index(Request $request)
             return redirect()->back()->with('error', 'Failed to create holiday package. Error: Check logs.')->withInput();
         }
     }
-    /**
-     * Update the specified resource in storage.
-     */
+
     public function update(Request $request, HolidayPackage $holidayPackage)
     {
         $validatedData = $request->validate([
-            'is_active' => 'boolean', // ✅ Validation for status
+            'is_active' => 'boolean',
+
+            // --- Non-translated ---
             'duration' => 'required|integer|min:1',
             'rating' => 'nullable|numeric|min:0|max:5',
             'map_url' => 'nullable|url',
+
             'price_tiers' => 'required|array|min:1',
             'price_tiers.*.min_pax' => 'required|integer|min:1',
             'price_tiers.*.max_pax' => 'nullable|integer|gte:price_tiers.*.min_pax',
             'price_tiers.*.price' => 'required|numeric|min:0',
+
+            // ✅ Add-ons
+            'addons' => 'nullable|array',
+            'addons.*.name' => 'required|string|max:255',
+            'addons.*.price' => 'required|numeric|min:0',
+
+            // --- Arrays ---
             'itinerary' => 'nullable|array',
             'itinerary.*.day' => 'required_with:itinerary|integer|min:1',
             'itinerary.*.title' => 'required_with:itinerary|string|max:255',
@@ -189,10 +216,14 @@ public function index(Request $request)
             'trip_info.*.label' => 'required_with:trip_info|string|max:255',
             'trip_info.*.value' => 'required_with:trip_info|string|max:255',
             'trip_info.*.icon' => 'nullable|string|max:50',
+
+            // --- Translated ---
             'name' => 'required|array','name.en' => 'required|string|max:255','name.id' => 'required|string|max:255',
             'description' => 'required|array','description.en' => 'nullable|string','description.id' => 'nullable|string',
             'location' => 'required|array','location.en' => 'nullable|string|max:255','location.id' => 'nullable|string|max:255',
             'category' => 'required|array','category.en' => 'nullable|string|max:255','category.id' => 'nullable|string|max:255',
+
+            // --- Images (Update logic typically handles deletions via separate field) ---
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'delete_images' => 'nullable|array',
@@ -213,9 +244,15 @@ public function index(Request $request)
                  }
             }
 
-            // Exclude translations and images
+            // Exclude translations and images from direct fill
             $packageData = Arr::except($validatedData, ['images', 'delete_images', 'name', 'description', 'location', 'category', 'en', 'id']);
 
+            // ✅ FIX: Explicitly handle is_active and addons
+            // This ensures if the checkbox is unchecked (sending nothing or false), it is correctly updated to false.
+            $packageData['is_active'] = $request->boolean('is_active');
+            $packageData['addons'] = $request->addons ?? [];
+
+             // Ensure JSON fields are reset if empty/null
              $arrayFields = ['itinerary', 'cost', 'faqs', 'trip_info'];
              foreach ($arrayFields as $field) {
                  if (!isset($packageData[$field]) || !is_array($packageData[$field]) || empty($packageData[$field])) {
@@ -231,6 +268,7 @@ public function index(Request $request)
 
             $holidayPackage->save();
 
+            // Handle Image Deletion
             if ($request->filled('delete_images')) {
                  $imagesToDelete = Image::whereIn('id', $request->input('delete_images'))
                                        ->where('imageable_id', $holidayPackage->id)
@@ -244,10 +282,14 @@ public function index(Request $request)
                 }
             }
 
+            // Handle New Image Uploads
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $imageFile) {
                     $path = $imageFile->store('holiday-packages', 'public');
-                    $holidayPackage->images()->create(['url' => $path]);
+                    $holidayPackage->images()->create([
+                        'url' => $path,
+                        'type' => 'gallery' // Default to gallery on update
+                    ]);
                 }
             }
 
@@ -291,6 +333,7 @@ public function index(Request $request)
         }
     }
 
+    // ... [storeImage, destroyImage, updateThumbnail methods remain unchanged] ...
     public function storeImage(Request $request, HolidayPackage $package)
     {
         $request->validate([
@@ -316,12 +359,8 @@ public function index(Request $request)
         }
     }
 
-    /**
-     * Remove the specified image from storage and database.
-     */
     public function destroyImage(HolidayPackage $package, Image $image)
     {
-         // Optional: Ownership check
          if ($image->imageable_id !== $package->id || $image->imageable_type !== HolidayPackage::class) {
              return redirect()->back()->with('error', 'Image not found or does not belong to this package.');
          }
@@ -330,9 +369,7 @@ public function index(Request $request)
             if ($image->url) {
                 Storage::disk('public')->delete($image->url);
             }
-
             $image->delete();
-
             return redirect()->back()->with('success', 'Image deleted successfully!');
 
         } catch (\Exception $e) {
@@ -349,24 +386,20 @@ public function index(Request $request)
 
         DB::beginTransaction();
         try {
-            // Find and delete the existing thumbnail for this package, if any
             $existingThumbnail = $package->images()->where('type', 'thumbnail')->first();
             if ($existingThumbnail) {
                 Storage::disk('public')->delete($existingThumbnail->url);
                 $existingThumbnail->delete();
             }
 
-            // Store the new thumbnail
             $path = $request->file('thumbnail')->store('holiday-packages/thumbnails', 'public');
 
-            // Create the new thumbnail image record
             $package->images()->create([
                 'url' => $path,
                 'type' => 'thumbnail',
             ]);
 
             DB::commit();
-
             return redirect()->back()->with('success', 'Thumbnail updated successfully!');
 
         } catch (\Exception $e) {

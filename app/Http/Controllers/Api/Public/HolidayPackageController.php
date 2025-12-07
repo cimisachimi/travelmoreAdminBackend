@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\Public;
 use App\Http\Controllers\Controller;
 use App\Models\HolidayPackage;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class HolidayPackageController extends Controller
 {
@@ -33,7 +32,8 @@ class HolidayPackageController extends Controller
         unset($package->images);
 
         // Ensure JSON fields are decoded properly
-        $jsonFields = ['itinerary', 'cost', 'faqs', 'trip_info'];
+        $jsonFields = ['itinerary', 'cost', 'faqs', 'trip_info', 'addons'];
+
         foreach ($jsonFields as $field) {
             if (isset($package->{$field}) && is_string($package->{$field})) {
                 $decoded = json_decode($package->{$field}, true);
@@ -55,7 +55,7 @@ class HolidayPackageController extends Controller
      */
     public function index()
     {
-        // ✅ ADDED: where('is_active', true)
+        // ✅ FIX: Filter to show ONLY active packages
         $packages = HolidayPackage::with('images')
             ->where('is_active', true)
             ->latest()
@@ -74,7 +74,7 @@ class HolidayPackageController extends Controller
      */
     public function show($id)
     {
-        // ✅ ADDED: where('is_active', true) to prevent accessing drafts via ID
+        // ✅ FIX: Prevent accessing Draft packages via direct link
         $package = HolidayPackage::with('images')
             ->where('is_active', true)
             ->findOrFail($id);
