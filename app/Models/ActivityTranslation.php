@@ -9,12 +9,14 @@ class ActivityTranslation extends Model
 {
     use HasFactory;
 
-    public $timestamps = false; // Translations don't need timestamps
+    public $timestamps = false;
 
     protected $fillable = [
         'name',
         'description',
         'location',
         'category',
+        'itinerary', // ✅ Added
+        'notes',     // ✅ Added
     ];
 }

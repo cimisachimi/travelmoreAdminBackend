@@ -12,48 +12,32 @@ class Activity extends Model implements TranslatableContract
 {
     use HasFactory, Translatable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
-        'is_active', // ✅ Added for Draft/Publish feature
+        'is_active',
         'price',
         'status',
         'duration',
-        'addons', // ✅ Add this
+        'addons',
+        'google_map_url', // ✅ Added
+        'includes',       // ✅ Added (JSON)
     ];
 
-    /**
-     * The attributes that are translatable.
-     *
-     * @var array
-     */
     public array $translatedAttributes = [
         'name',
         'description',
         'location',
         'category',
-
+        'itinerary',      // ✅ Added (Text)
+        'notes',          // ✅ Added (Text)
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'price' => 'decimal:2',
-        'addons' => 'array', // ✅ Add this
-        'is_active' => 'boolean', // ✅ Cast to boolean for frontend toggle
+        'addons' => 'array',
+        'is_active' => 'boolean',
+        'includes' => 'array', // ✅ Cast JSON to Array
     ];
 
-    /**
-     * The accessors to append to the model's array form.
-     *
-     * @var array
-     */
     protected $appends = [
         'thumbnail_url',
         'images_url',
@@ -71,21 +55,18 @@ class Activity extends Model implements TranslatableContract
         return $this->morphMany(Booking::class, 'bookable');
     }
 
-
     // --- Accessors ---
 
     public function getThumbnailUrlAttribute()
     {
         $thumbnail = $this->images->firstWhere('type', 'thumbnail');
-        // AFTER
-if ($thumbnail) {
-    return Storage::disk('public')->url($thumbnail->url); // <-- To this
-}
-$firstImage = $this->images->first();
-if ($firstImage) {
-    return Storage::disk('public')->url($firstImage->url); // <-- And this
-}
-
+        if ($thumbnail) {
+            return Storage::disk('public')->url($thumbnail->url);
+        }
+        $firstImage = $this->images->first();
+        if ($firstImage) {
+            return Storage::disk('public')->url($firstImage->url);
+        }
         return null;
     }
 
@@ -94,7 +75,7 @@ if ($firstImage) {
         return $this->images->map(function ($image) {
             return [
                 'id' => $image->id,
-                'url' => Storage::disk('public')->url($image->url), // <-- To this
+                'url' => Storage::disk('public')->url($image->url),
                 'type' => $image->type,
             ];
         });

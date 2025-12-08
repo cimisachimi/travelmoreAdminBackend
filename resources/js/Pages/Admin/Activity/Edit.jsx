@@ -11,18 +11,58 @@ import { ArrowLeft, Trash2, Upload, Save, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import React from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/Components/ui/alert-dialog";
-// ✅ Import AddonsRepeater
 import AddonsRepeater from "@/Pages/Admin/Components/AddonsRepeater";
+import IncludesRepeater from "@/Pages/Admin/Components/IncludesRepeater"; // ✅ Import
 
+// ✅ TranslationForm with Itinerary & Notes
 function TranslationForm({ locale, data, errors, onChange }) {
     return (
         <div className="space-y-4">
-            <div><Label>Name ({locale.toUpperCase()})</Label><Input value={data.name} onChange={(e) => onChange(locale, "name", e.target.value)} /><InputError message={errors[`translations.${locale}.name`]} className="mt-1"/></div>
-            <div className="grid grid-cols-2 gap-4">
-                <div><Label>Location</Label><Input value={data.location} onChange={(e) => onChange(locale, "location", e.target.value)} /><InputError message={errors[`translations.${locale}.location`]} className="mt-1"/></div>
-                <div><Label>Category</Label><Input value={data.category} onChange={(e) => onChange(locale, "category", e.target.value)} /><InputError message={errors[`translations.${locale}.category`]} className="mt-1"/></div>
+            <div>
+                <Label>Name ({locale.toUpperCase()})</Label>
+                <Input value={data.name} onChange={(e) => onChange(locale, "name", e.target.value)} />
+                <InputError message={errors[`translations.${locale}.name`]} className="mt-1"/>
             </div>
-            <div><Label>Description</Label><Textarea value={data.description} onChange={(e) => onChange(locale, "description", e.target.value)} rows={6}/><InputError message={errors[`translations.${locale}.description`]} className="mt-1"/></div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label>Location</Label>
+                    <Input value={data.location} onChange={(e) => onChange(locale, "location", e.target.value)} />
+                    <InputError message={errors[`translations.${locale}.location`]} className="mt-1"/>
+                </div>
+                <div>
+                    <Label>Category</Label>
+                    <Input value={data.category} onChange={(e) => onChange(locale, "category", e.target.value)} />
+                    <InputError message={errors[`translations.${locale}.category`]} className="mt-1"/>
+                </div>
+            </div>
+
+            <div>
+                <Label>Description</Label>
+                <Textarea value={data.description} onChange={(e) => onChange(locale, "description", e.target.value)} rows={4}/>
+                <InputError message={errors[`translations.${locale}.description`]} className="mt-1"/>
+            </div>
+
+            {/* ✅ Translatable Text Fields */}
+            <div>
+                <Label>Itinerary</Label>
+                <Textarea
+                    value={data.itinerary}
+                    onChange={(e) => onChange(locale, "itinerary", e.target.value)}
+                    rows={5}
+                />
+                <InputError message={errors[`translations.${locale}.itinerary`]} className="mt-1" />
+            </div>
+
+            <div>
+                <Label>Important Notes</Label>
+                <Textarea
+                    value={data.notes}
+                    onChange={(e) => onChange(locale, "notes", e.target.value)}
+                    rows={3}
+                />
+                <InputError message={errors[`translations.${locale}.notes`]} className="mt-1" />
+            </div>
         </div>
     );
 }
@@ -33,10 +73,26 @@ function EditActivityForm({ activity, errors }) {
         price: activity.price || 0,
         status: activity.status || "active",
         duration: activity.duration || "",
-        addons: activity.addons || [], // ✅ Load existing addons
+        google_map_url: activity.google_map_url || "",
+        includes: activity.includes || { included: [], excluded: [] }, // ✅ Load Includes
+        addons: activity.addons || [],
         translations: {
-            en: { name: activity.translations.en?.name || "", description: activity.translations.en?.description || "", location: activity.translations.en?.location || "", category: activity.translations.en?.category || "" },
-            id: { name: activity.translations.id?.name || "", description: activity.translations.id?.description || "", location: activity.translations.id?.location || "", category: activity.translations.id?.category || "" },
+            en: {
+                name: activity.translations.en?.name || "",
+                description: activity.translations.en?.description || "",
+                location: activity.translations.en?.location || "",
+                category: activity.translations.en?.category || "",
+                itinerary: activity.translations.en?.itinerary || "", // ✅ Load Itinerary
+                notes: activity.translations.en?.notes || ""          // ✅ Load Notes
+            },
+            id: {
+                name: activity.translations.id?.name || "",
+                description: activity.translations.id?.description || "",
+                location: activity.translations.id?.location || "",
+                category: activity.translations.id?.category || "",
+                itinerary: activity.translations.id?.itinerary || "", // ✅ Load Itinerary
+                notes: activity.translations.id?.notes || ""          // ✅ Load Notes
+            },
         },
     });
 
@@ -61,13 +117,27 @@ function EditActivityForm({ activity, errors }) {
                     <CardHeader><CardTitle>Activity Details</CardTitle></CardHeader>
                     <CardContent>
                         <Tabs defaultValue="en">
-                            <TabsList className="grid w-full grid-cols-3 mb-4">
+                            <TabsList className="grid w-full grid-cols-4 mb-4">
                                 <TabsTrigger value="en">English</TabsTrigger>
                                 <TabsTrigger value="id">Indonesian</TabsTrigger>
-                                <TabsTrigger value="addons">Add-ons</TabsTrigger> {/* ✅ Add-ons Tab */}
+                                <TabsTrigger value="includes">Inc/Exc</TabsTrigger> {/* ✅ New Tab */}
+                                <TabsTrigger value="addons">Add-ons</TabsTrigger>
                             </TabsList>
-                            <TabsContent value="en" className="mt-4"><TranslationForm locale="en" data={data.translations.en} errors={errors} onChange={handleTranslationChange} /></TabsContent>
-                            <TabsContent value="id" className="mt-4"><TranslationForm locale="id" data={data.translations.id} errors={errors} onChange={handleTranslationChange} /></TabsContent>
+                            <TabsContent value="en" className="mt-4">
+                                <TranslationForm locale="en" data={data.translations.en} errors={errors} onChange={handleTranslationChange} />
+                            </TabsContent>
+                            <TabsContent value="id" className="mt-4">
+                                <TranslationForm locale="id" data={data.translations.id} errors={errors} onChange={handleTranslationChange} />
+                            </TabsContent>
+
+                            {/* ✅ Includes Tab (Structured) */}
+                            <TabsContent value="includes" className="mt-4">
+                                <IncludesRepeater
+                                    data={data.includes}
+                                    setData={setData}
+                                    errors={errors}
+                                />
+                            </TabsContent>
 
                             {/* ✅ Add-ons Content */}
                             <TabsContent value="addons" className="mt-4">
@@ -84,8 +154,21 @@ function EditActivityForm({ activity, errors }) {
                     <Card>
                         <CardHeader><CardTitle>Core Settings</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
-                            <div><Label>Price (IDR)</Label><Input type="number" value={data.price} onChange={(e) => setData("price", e.target.value)} /><InputError message={errors.price} className="mt-1" /></div>
-                            <div><Label>Duration</Label><Input value={data.duration} onChange={(e) => setData("duration", e.target.value)} /><InputError message={errors.duration} className="mt-1" /></div>
+                            <div>
+                                <Label>Price (IDR)</Label>
+                                <Input type="number" value={data.price} onChange={(e) => setData("price", e.target.value)} />
+                                <InputError message={errors.price} className="mt-1" />
+                            </div>
+                            <div>
+                                <Label>Duration</Label>
+                                <Input value={data.duration} onChange={(e) => setData("duration", e.target.value)} />
+                                <InputError message={errors.duration} className="mt-1" />
+                            </div>
+                            <div>
+                                <Label>Google Map URL</Label>
+                                <Input value={data.google_map_url} onChange={(e) => setData("google_map_url", e.target.value)} />
+                                <InputError message={errors.google_map_url} className="mt-1" />
+                            </div>
                         </CardContent>
                     </Card>
                 </div>

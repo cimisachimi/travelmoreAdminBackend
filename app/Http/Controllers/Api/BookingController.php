@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod; // ✅ Added CarbonPeriod for date iteration
 use App\Models\HolidayPackage;
 use App\Models\DiscountCode;
 use Illuminate\Validation\ValidationException;
@@ -24,14 +25,11 @@ use App\Models\OpenTrip;
 
 class BookingController extends Controller
 {
-    // ... [storeCarRentalBooking, index, show, update, storeTripPlannerBooking methods remain unchanged] ...
-
     /**
      * Store a newly created car rental booking.
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
-        // (Keep existing code from previous steps...)
         $validated = $request->validate([
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
@@ -44,18 +42,25 @@ class BookingController extends Controller
         $endDate = Carbon::parse($validated['end_date']);
         $user = Auth::user();
 
+        // 1. Basic Status Check (Global)
         if ($carRental->status !== 'available') {
             return response()->json(['message' => 'This car is not available for booking.'], 422);
         }
-        $requestedDays = $startDate->diffInDays($endDate) + 1;
-        $availableDays = CarRentalAvailability::where('car_rental_id', $carRental->id)
-            ->whereBetween('date', [$startDate, $endDate])
-            ->where('status', 'available')
-            ->count();
 
-        if ($availableDays < $requestedDays) {
+        // 2. ✅ FIXED AVAILABILITY CHECK
+        // Instead of requiring 'available' rows (which fails if "today" hasn't been seeded),
+        // we simply check if there are any CONFLICTS (booked or maintenance).
+        // If no conflicts found, we assume it's free.
+        $conflictingDates = CarRentalAvailability::where('car_rental_id', $carRental->id)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->whereIn('status', ['booked', 'maintenance'])
+            ->exists();
+
+        if ($conflictingDates) {
             return response()->json(['message' => 'The selected dates are not available for this car.'], 422);
         }
+
+        $requestedDays = $startDate->diffInDays($endDate) + 1;
 
         try {
             DB::beginTransaction();
@@ -111,9 +116,23 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            CarRentalAvailability::where('car_rental_id', $carRental->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->update(['status' => 'booked']);
+            // 3. ✅ FIXED AVAILABILITY UPDATE
+            // Iterate through each day and create/update the record to 'booked'.
+            // This ensures if the row didn't exist before, it is created now.
+            $period = CarbonPeriod::create($startDate, $endDate);
+
+            foreach ($period as $date) {
+                CarRentalAvailability::updateOrCreate(
+                    [
+                        'car_rental_id' => $carRental->id,
+                        'date' => $date->toDateString()
+                    ],
+                    [
+                        'status' => 'booked',
+                        'price' => $carRental->price_per_day // Persist price
+                    ]
+                );
+            }
 
             DB::commit();
 
@@ -273,7 +292,7 @@ class BookingController extends Controller
             'flight_number' => 'nullable|string|max:50',
             'special_request' => 'nullable|string',
 
-            // ✅ Add-ons Validation: Expects an array of addon names strings
+            // ✅ Add-ons Validation
             'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
         ]);
@@ -285,14 +304,13 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        // 1. Calculate Base Price based on Tiers
         $pricePerPax = $package->getPricePerPax($totalPax);
         if ($pricePerPax === null) {
             return response()->json(['message' => 'Pricing unavailable for this number of pax.'], 400);
         }
         $baseSubtotal = $pricePerPax * $totalPax;
 
-        // 2. Calculate Add-ons Price
+        // ✅ Calculate Add-ons
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
@@ -314,7 +332,6 @@ class BookingController extends Controller
             }
         }
 
-        // 3. Calculate Discount
         $discountAmount = 0;
         $discountCodeId = null;
         $discountCode = null;
@@ -324,20 +341,17 @@ class BookingController extends Controller
             if (!$discountCode || !$discountCode->isValid()) {
                 throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
-            // Discount applies to the Base Subtotal (excluding add-ons)
             $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
             $discountCodeId = $discountCode->id;
         }
 
-        // 4. Final Totals
-        $finalSubtotal = $baseSubtotal + $addonsTotal; // Total before discount
-        $totalPrice = $finalSubtotal - $discountAmount; // Total after discount
-        $downPayment = $totalPrice * 0.5; // 50% Down Payment
+        $finalSubtotal = $baseSubtotal + $addonsTotal;
+        $totalPrice = $finalSubtotal - $discountAmount;
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = now()->addHours(2);
 
         DB::beginTransaction();
         try {
-            // A. Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
@@ -350,7 +364,6 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // B. Create Booking
             $booking = $package->bookings()->create([
                 'user_id' => $user->id,
                 'booking_date' => $validated['start_date'],
@@ -376,7 +389,7 @@ class BookingController extends Controller
                     'price_per_pax' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Save add-on details in JSON
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Save details in Booking
                     'discount_applied' => $discountAmount
                 ]
             ]);
@@ -413,7 +426,6 @@ class BookingController extends Controller
             }
 
             DB::commit();
-
             return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
 
         } catch (\Exception $e) {
@@ -526,7 +538,7 @@ class BookingController extends Controller
                     'price_per_person' => $pricePerPax,
                     'base_subtotal' => $baseSubtotal,
                     'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved in JSON
+                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved
                 ],
             ]);
 
@@ -547,10 +559,6 @@ class BookingController extends Controller
         }
     }
 
-    /**
-     * Store a booking for an Open Trip.
-     * ✅ UPDATED TO INCLUDE ADD-ONS
-     */
     public function storeOpenTripBooking(Request $request, $openTripId)
     {
         $validated = $request->validate([
@@ -576,7 +584,7 @@ class BookingController extends Controller
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
 
-        $pricePerPax = $trip->starting_from_price; // Or specific tier logic if you have it
+        $pricePerPax = $trip->starting_from_price;
         if (!$pricePerPax || $pricePerPax <= 0) {
              return response()->json(['message' => 'Price info missing.'], 400);
         }
@@ -610,7 +618,6 @@ class BookingController extends Controller
             if (!$discountCode || !$discountCode->isValid()) {
                 throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
             }
-            // Discount applies to base price usually
             $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
             $discountCodeId = $discountCode->id;
         }
