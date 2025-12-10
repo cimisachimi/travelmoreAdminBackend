@@ -1,125 +1,258 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Components/ui/card';
-import { Users, Package, BaggageClaim, DollarSign, Truck, LineChart, BarChart } from 'lucide-react'; // Added Truck, LineChart, BarChart
+import { Button } from '@/Components/ui/button';
+import { Badge } from '@/Components/ui/badge';
+import {
+    Users,
+    CreditCard,
+    Activity,
+    DollarSign,
+    ArrowUpRight,
+    ArrowDownRight,
+    ShoppingBag,
+} from 'lucide-react';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+    Legend
+} from 'recharts';
 
-export default function Dashboard({ auth, stats }) {
+export default function Dashboard({ auth, stats, charts, recent_orders }) {
 
-    // Helper to format currency safely
+    // Safely format currency. If amount is invalid, defaults to 0.
     const formatCurrency = (amount) => {
-        const numericAmount = Number(amount) || 0;
+        const value = Number(amount) || 0;
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
             currency: 'IDR',
             minimumFractionDigits: 0,
-        }).format(numericAmount); //
+            maximumFractionDigits: 0,
+        }).format(value);
     };
 
+    const COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#f97316', '#8b5cf6'];
+
+    // Helper for Growth Indicator
+    const GrowthIndicator = ({ value }) => {
+        const numValue = Number(value) || 0;
+        const isPositive = numValue >= 0;
+        return (
+            <div className={`flex items-center text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                {isPositive ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
+                {Math.abs(numValue)}% from last month
+            </div>
+        );
+    };
+
+    // Default values in case props are missing
+    const safeStats = stats || {};
+    const safeCharts = charts || { revenue: [], categories: [] };
+    const safeOrders = recent_orders || [];
+
     return (
-        <AuthenticatedLayout
-            user={auth.user}
-            header="Dashboard Overview" // Updated header text
-        >
+        <AuthenticatedLayout user={auth.user} header="Overview">
             <Head title="Dashboard" />
 
-            {/* Stats Cards Section */}
-            <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5"> {/* Changed grid to 5 cols */}
-                {/* Total Revenue Card */}
-                <Card className="hover:shadow-lg transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(stats.revenue)}</div> {/* */}
-                        <p className="text-xs text-muted-foreground">From settled transactions</p>
-                    </CardContent>
-                </Card>
+            <div className="py-6 space-y-6">
 
-                {/* Total Users Card */}
-                <Card className="hover:shadow-lg transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Clients</CardTitle> {/* Changed Title */}
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.users}</div> {/* */}
-                        <p className="text-xs text-muted-foreground">Registered client accounts</p>
-                    </CardContent>
-                </Card>
+                {/* 1. KEY METRICS ROW */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {/* Revenue */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrency(safeStats.total_revenue)}</div>
+                            <GrowthIndicator value={safeStats.revenue_growth} />
+                        </CardContent>
+                    </Card>
 
-                {/* Total Bookings Card */}
-                <Card className="hover:shadow-lg transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-                        <BaggageClaim className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.bookings}</div> {/* */}
-                        <p className="text-xs text-muted-foreground">Across all services</p>
-                    </CardContent>
-                </Card>
+                    {/* Orders */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{safeStats.total_orders || 0}</div>
+                            <p className="text-xs text-muted-foreground">Lifetime orders</p>
+                        </CardContent>
+                    </Card>
 
-                {/* Holiday Packages Card */}
-                <Card className="hover:shadow-lg transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Packages/Services</CardTitle> {/* Changed Title */}
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        {/* Assuming stats.packages is just one type, add others if available */}
-                        <div className="text-2xl font-bold">{stats.packages}</div> {/* */}
-                        <p className="text-xs text-muted-foreground">Total available services</p>
-                    </CardContent>
-                </Card>
+                    {/* Clients */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{safeStats.total_clients || 0}</div>
+                            <p className="text-xs text-muted-foreground">
+                                +{safeStats.new_clients || 0} new this month
+                            </p>
+                        </CardContent>
+                    </Card>
 
-                {/* Needs Delivery Card - NEW */}
-                <Card className="border-orange-500 hover:shadow-lg transition-shadow"> {/* Added orange border */}
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-orange-600">Needs Delivery</CardTitle> {/* Orange text */}
-                        <Truck className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.needs_delivery}</div>
-                        <p className="text-xs text-muted-foreground">Paid orders awaiting fulfillment</p>
-                    </CardContent>
-                </Card>
-            </div>
+                    {/* Action Items */}
+                    <Card className="border-l-4 border-l-orange-500">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Action Required</CardTitle>
+                            <Activity className="h-4 w-4 text-orange-500" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm text-muted-foreground">Needs Delivery</span>
+                                <span className="font-bold text-orange-600">{safeStats.needs_delivery || 0}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Pending Refunds</span>
+                                <span className="font-bold text-red-600">{safeStats.pending_refunds || 0}</span>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
 
-            {/* Charts Section - Placeholder */}
-            <div className="grid gap-6 md:grid-cols-2">
+                {/* 2. CHARTS SECTION */}
+                <div className="grid gap-4 md:grid-cols-7">
+
+                    {/* Revenue Bar Chart (Span 4 cols) */}
+                    <Card className="col-span-4">
+                        <CardHeader>
+                            <CardTitle>Revenue Overview</CardTitle>
+                            <CardDescription>Monthly revenue for the last 6 months</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pl-2">
+                            <div className="h-[300px] w-full">
+                                {safeCharts.revenue && safeCharts.revenue.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={safeCharts.revenue}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis
+                                                dataKey="name"
+                                                stroke="#888888"
+                                                fontSize={12}
+                                                tickLine={false}
+                                                axisLine={false}
+                                            />
+                                            <YAxis
+                                                stroke="#888888"
+                                                fontSize={12}
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tickFormatter={(value) => `Rp ${(value / 1000000).toFixed(0)}M`}
+                                            />
+                                            <Tooltip
+                                                cursor={{fill: 'transparent'}}
+                                                formatter={(value) => formatCurrency(value)}
+                                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                            />
+                                            <Bar dataKey="total" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                                        No revenue data available (Check Transactions)
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Category Pie Chart (Span 3 cols) */}
+                    <Card className="col-span-3">
+                        <CardHeader>
+                            <CardTitle>Sales by Category</CardTitle>
+                            <CardDescription>Distribution across services</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[300px] w-full">
+                                {safeCharts.categories && safeCharts.categories.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={safeCharts.categories}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {safeCharts.categories.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip />
+                                            <Legend verticalAlign="bottom" height={36}/>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                                        No category data available (Check Orders)
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* 3. RECENT ORDERS TABLE */}
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <LineChart className="h-5 w-5 text-muted-foreground" /> Revenue Over Time
-                        </CardTitle>
-                        <CardDescription>Placeholder for a line chart showing revenue trends.</CardDescription>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                            <CardTitle>Recent Orders</CardTitle>
+                            <CardDescription>Latest transactions from your customers.</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={route('admin.orders.index')}>View All</Link>
+                        </Button>
                     </CardHeader>
                     <CardContent>
-                        {/* Placeholder Content - Replace with actual chart component */}
-                        <div className="h-64 flex items-center justify-center bg-muted/50 rounded-md">
-                            <p className="text-muted-foreground">Revenue Chart Coming Soon...</p>
+                        <div className="space-y-4">
+                            {safeOrders.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No recent orders found.</p>
+                            ) : (
+                                safeOrders.map((order) => (
+                                    <div key={order.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+                                        <div className="flex items-center gap-4">
+                                            <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+                                                <CreditCard className="h-5 w-5 text-slate-500" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-medium leading-none">{order.customer}</p>
+                                                <p className="text-xs text-muted-foreground">{order.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="hidden md:block text-sm text-muted-foreground capitalize">
+                                            {order.service}
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right">
+                                                <p className="text-sm font-medium">{formatCurrency(order.amount)}</p>
+                                                <p className="text-xs text-muted-foreground">{order.date}</p>
+                                            </div>
+                                            <Badge variant={order.status === 'paid' || order.status === 'settlement' ? 'default' : 'secondary'}>
+                                                {order.status}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <BarChart className="h-5 w-5 text-muted-foreground" /> Booking Sources
-                        </CardTitle>
-                        <CardDescription>Placeholder for a chart showing booking types (Car, Package, etc.).</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {/* Placeholder Content - Replace with actual chart component */}
-                        <div className="h-64 flex items-center justify-center bg-muted/50 rounded-md">
-                            <p className="text-muted-foreground">Bookings Chart Coming Soon...</p>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
-
-            {/* Potentially add more sections like Recent Activity, etc. */}
-
         </AuthenticatedLayout>
     );
 }

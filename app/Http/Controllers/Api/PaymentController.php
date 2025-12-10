@@ -16,7 +16,9 @@ use Midtrans\Config;
 use Midtrans\Snap;
 use Midtrans\Notification;
 use Carbon\Carbon;
-
+use App\Models\User; // ✅ ADD THIS
+use App\Notifications\NewOrderAdminNotification; // ✅ ADD THIS
+use Illuminate\Support\Facades\Notification as LaravelNotification; // ✅ ADD THIS (Alias to avoid conflict with Midtrans)
 class PaymentController extends Controller
 {
     public function __construct()
@@ -206,7 +208,10 @@ class PaymentController extends Controller
                 return response()->json(['message' => 'Transaction already processed.']);
             }
 
-            DB::transaction(function () use ($transaction, $order, $notification, $transactionStatus, $fraudStatus) {
+            // Flag to determine if we need to send an email (default false)
+            $shouldNotifyAdmin = false;
+
+            DB::transaction(function () use ($transaction, $order, $notification, $transactionStatus, $fraudStatus, &$shouldNotifyAdmin) {
                 $transaction->payment_type = $notification->payment_type;
                 $transaction->payment_payloads = json_encode($notification->getResponse());
 
@@ -222,6 +227,12 @@ class PaymentController extends Controller
 
                     $finalTransactionStatus = 'settlement';
                     $isDownPayment = $areNotesEqual;
+
+                    // CHECK FOR NOTIFICATION:
+                    // Only notify if the order wasn't already marked as paid/partial to avoid duplicates
+                    if ($order->status !== 'paid' && $order->status !== 'partially_paid') {
+                        $shouldNotifyAdmin = true;
+                    }
 
                     if ($isDownPayment && $finalOrderStatus !== 'partially_paid') {
                         $finalOrderStatus = 'partially_paid';
@@ -270,6 +281,22 @@ class PaymentController extends Controller
                 }
             });
 
+            // ✅ SEND EMAIL NOTIFICATION (Outside transaction to prevent delay/rollback issues)
+            if ($shouldNotifyAdmin) {
+                try {
+                    // Fetch all admins using the constant from your User model
+                    $admins = User::where('role', User::ROLE_ADMIN)->get();
+
+                    if ($admins->count() > 0) {
+                        LaravelNotification::send($admins, new NewOrderAdminNotification($order));
+                        Log::info('Admin notification email queued for Order #' . $order->order_number);
+                    }
+                } catch (\Exception $e) {
+                    // Log error but don't fail the webhook response
+                    Log::error('Failed to send admin notification: ' . $e->getMessage());
+                }
+            }
+
             return response()->json(['message' => 'Notification handled successfully.'], 200);
 
         } catch (\Exception $e) {
@@ -277,7 +304,6 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Internal error'], 500);
         }
     }
-
     protected function releaseAvailability(Order $order)
     {
         if ($order->booking && $order->booking->bookable instanceof CarRental) {
