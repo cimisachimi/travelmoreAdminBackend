@@ -9,12 +9,6 @@ class TripPlanner extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
-    // ✅ --- THIS IS THE FINAL, COMPLETE LIST OF ALL FIELDS ---
     protected $fillable = [
         'user_id',
         'type',
@@ -52,14 +46,9 @@ class TripPlanner extends Model
         'is_frequent_traveler',
         'travel_type',
         'price',
-        'recommendation_content', // ✅ Add this line
+        // 'recommendation_content', // REMOVED
     ];
 
-    /**
-     * The attributes that should be cast to native types.
-     *
-     * @var array
-     */
     protected $casts = [
         'addons' => 'array',
         'budget_priorities' => 'array',
@@ -69,17 +58,11 @@ class TripPlanner extends Model
         'consent' => 'boolean',
     ];
 
-    /**
-     * Get the user that owns the trip plan.
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get all of the planner's bookings.
-     */
     public function bookings()
     {
         return $this->morphMany(Booking::class, 'bookable');

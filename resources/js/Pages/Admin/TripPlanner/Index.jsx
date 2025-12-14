@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import { Button } from '@/Components/ui/button';
-import { MoreHorizontal, Users, MapPin, Calendar, Clock, CreditCard } from 'lucide-react'; // Added icons
+import { MoreHorizontal, Users, MapPin, Calendar, Clock, CreditCard, Phone, CheckCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/Components/ui/badge';
 import Pagination from '@/Components/Pagination';
 import { Label } from '@/Components/ui/label';
@@ -20,12 +20,18 @@ const formatCurrency = (amount) => {
     }).format(amount || 0);
 };
 
-// Helper: Admin Status Badge (Approved/Pending/Rejected)
+// ✅ UPDATED: Detailed Status Badges
 const getAdminStatusBadge = (status) => {
     switch (status) {
-        case 'Approved': return 'bg-green-600 hover:bg-green-700';
-        case 'Rejected': return 'bg-red-600 hover:bg-red-700';
-        default: return 'bg-blue-600 hover:bg-blue-700';
+        case 'Accepted': // Client Accepted
+            return <Badge className="bg-emerald-600 hover:bg-emerald-700 gap-1"><CheckCircle size={12}/> Client Accepted</Badge>;
+        case 'In Progress': // Currently communicating
+            return <Badge className="bg-blue-600 hover:bg-blue-700 gap-1"><Loader2 size={12} className="animate-spin"/> In Progress</Badge>;
+        case 'Rejected':
+            return <Badge variant="destructive">Rejected</Badge>;
+        case 'Pending':
+        default: // Default state = Need to Contact
+            return <Badge className="bg-orange-500 hover:bg-orange-600 gap-1"><Phone size={12}/> Need Contact</Badge>;
     }
 };
 
@@ -34,30 +40,16 @@ const getPaymentStatusBadge = (bookings) => {
     if (!bookings || bookings.length === 0) {
         return <Badge variant="outline" className="text-gray-500 border-gray-300">Not Booked</Badge>;
     }
-
-    // 1. Sort bookings by ID descending (Newest first)
     const sortedBookings = [...bookings].sort((a, b) => b.id - a.id);
-
-    // 2. Ideally, we want to show the 'paid' one if it exists, otherwise the latest one
-    // Find a successful booking
     let booking = sortedBookings.find(b => b.payment_status === 'paid' || b.payment_status === 'partial');
-
-    // 3. If no paid booking found, just take the latest attempt
-    if (!booking) {
-        booking = sortedBookings[0];
-    }
+    if (!booking) booking = sortedBookings[0];
 
     switch (booking.payment_status) {
-        case 'paid':
-            return <Badge className="bg-emerald-500 hover:bg-emerald-600">Paid</Badge>;
-        case 'partial':
-             return <Badge className="bg-blue-500 hover:bg-blue-600">Partial</Badge>;
-        case 'unpaid':
-            return <Badge className="bg-orange-500 hover:bg-orange-600">Unpaid</Badge>;
-        case 'cancelled':
-             return <Badge variant="destructive">Cancelled</Badge>;
-        default:
-            return <Badge variant="secondary">{booking.payment_status}</Badge>;
+        case 'paid': return <Badge className="bg-emerald-500 hover:bg-emerald-600">Paid</Badge>;
+        case 'partial': return <Badge className="bg-blue-500 hover:bg-blue-600">Partial</Badge>;
+        case 'unpaid': return <Badge className="bg-orange-500 hover:bg-orange-600">Unpaid</Badge>;
+        case 'cancelled': return <Badge variant="destructive">Cancelled</Badge>;
+        default: return <Badge variant="secondary">{booking.payment_status}</Badge>;
     }
 };
 
@@ -74,9 +66,7 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
 
   const submitGeneralPrice = (e) => {
     e.preventDefault();
-    put(route('admin.planners.update-price'), {
-      preserveScroll: true,
-    });
+    put(route('admin.planners.update-price'), { preserveScroll: true });
   };
 
   return (
@@ -131,9 +121,7 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Trip Requests</CardTitle>
-            <CardDescription>
-              Manage incoming custom trip itinerary requests.
-            </CardDescription>
+            <CardDescription>Manage incoming custom trip itinerary requests.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -142,7 +130,7 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                   <TableHead className="w-[200px]">Traveler</TableHead>
                   <TableHead className="w-[250px]">Destination & Style</TableHead>
                   <TableHead className="w-[200px]">Timing</TableHead>
-                  <TableHead>Review Status</TableHead>
+                  <TableHead>Current Status</TableHead>
                   <TableHead>Payment</TableHead>
                   <TableHead className="text-right">Submitted</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
@@ -151,33 +139,21 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
               <TableBody>
                 {planners.data.length === 0 ? (
                     <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            No trip requests found.
-                        </TableCell>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No trip requests found.</TableCell>
                     </TableRow>
                 ) : (
                     planners.data.map((planner) => {
-                        // Calculate total pax safely
-                        const totalPax = (parseInt(planner.pax_adults) || 0) +
-                                         (parseInt(planner.pax_teens) || 0) +
-                                         (parseInt(planner.pax_kids) || 0) +
-                                         (parseInt(planner.pax_seniors) || 0);
-
-                        // Format Destination
+                        const totalPax = (parseInt(planner.pax_adults) || 0) + (parseInt(planner.pax_teens) || 0) + (parseInt(planner.pax_kids) || 0) + (parseInt(planner.pax_seniors) || 0);
                         const destination = [planner.city, planner.province].filter(Boolean).join(', ') || "Unspecified";
 
                         return (
                         <TableRow key={planner.id}>
-                            {/* Traveler Info */}
                             <TableCell>
-                                <div className="font-bold text-gray-900 dark:text-gray-100">
-                                    {planner.full_name || planner.company_name || "Guest"}
-                                </div>
+                                <div className="font-bold text-gray-900 dark:text-gray-100">{planner.full_name || planner.company_name || "Guest"}</div>
                                 <div className="text-xs text-muted-foreground">{planner.email}</div>
                                 <div className="text-xs text-muted-foreground">{planner.phone}</div>
                             </TableCell>
 
-                            {/* Destination & Style */}
                             <TableCell>
                                 <div className="flex items-center gap-1.5 font-medium text-sm">
                                     <MapPin size={14} className="text-blue-500" />
@@ -187,48 +163,33 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                                     <Users size={12} />
                                     <span>{totalPax} Pax ({planner.pax_adults || 0}A / {planner.pax_kids || 0}C)</span>
                                 </div>
-                                <div className="mt-0.5 text-xs bg-gray-100 dark:bg-gray-800 w-fit px-1.5 py-0.5 rounded">
-                                    {planner.trip_type || 'General'}
-                                </div>
+                                <div className="mt-0.5 text-xs bg-gray-100 dark:bg-gray-800 w-fit px-1.5 py-0.5 rounded">{planner.trip_type || 'General'}</div>
                             </TableCell>
 
-                            {/* Timing */}
                             <TableCell>
                                 <div className="flex items-center gap-1.5 text-sm">
                                     <Calendar size={14} className="text-gray-400" />
                                     {formatDate(planner.departure_date)}
                                 </div>
                                 {planner.duration && (
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                                        <Clock size={12} />
-                                        {planner.duration}
-                                    </div>
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1"><Clock size={12} />{planner.duration}</div>
                                 )}
                             </TableCell>
 
-                            {/* Admin Review Status */}
+                            {/* ✅ UPDATED: Status Column */}
                             <TableCell>
-                                <Badge className={`capitalize text-white shadow-none ${getAdminStatusBadge(planner.status)}`}>
-                                    {planner.status}
-                                </Badge>
-                                <div className="mt-1 text-xs font-medium text-gray-500">
-                                    {formatCurrency(planner.price)}
-                                </div>
+                                {getAdminStatusBadge(planner.status)}
+                                <div className="mt-1 text-xs font-medium text-gray-500">{formatCurrency(planner.price)}</div>
                             </TableCell>
 
-                            {/* Payment Status (from Relationship) */}
-                            <TableCell>
-                                {getPaymentStatusBadge(planner.bookings)}
-                            </TableCell>
+                            <TableCell>{getPaymentStatusBadge(planner.bookings)}</TableCell>
 
-                            {/* Submitted Date */}
                             <TableCell className="text-right text-xs text-muted-foreground">
                                 {new Date(planner.created_at).toLocaleDateString()}
                                 <br />
                                 {new Date(planner.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </TableCell>
 
-                            {/* Actions */}
                             <TableCell>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -239,9 +200,7 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                     <DropdownMenuItem asChild>
-                                        <Link href={route("admin.planners.edit", planner.id)} className="cursor-pointer font-medium">
-                                            Manage & Recommend
-                                        </Link>
+                                        <Link href={route("admin.planners.edit", planner.id)} className="cursor-pointer font-medium">Manage & Update</Link>
                                     </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -252,7 +211,6 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                 )}
               </TableBody>
             </Table>
-
             <Pagination links={planners.links} className="mt-6" />
           </CardContent>
         </Card>

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Com
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/Components/ui/tabs'; // Imported Tabs
 import {
     Users,
     CreditCard,
@@ -12,6 +13,8 @@ import {
     ArrowUpRight,
     ArrowDownRight,
     ShoppingBag,
+    Truck, // Imported Truck icon
+    AlertCircle // Imported Alert icon
 } from 'lucide-react';
 import {
     BarChart,
@@ -27,12 +30,13 @@ import {
     Legend
 } from 'recharts';
 
-export default function Dashboard({ auth, stats, charts, recent_orders, filters }) {
+export default function Dashboard({ auth, stats, charts, recent_orders, delivery_orders, filters }) { // Added delivery_orders prop
 
     const currentRange = filters?.range || 'month';
 
     const onRangeChange = (value) => {
-        router.get(route('dashboard'), { range: value }, {
+        // Ensure this points to admin dashboard
+        router.get(route('admin.dashboard'), { range: value }, {
             preserveState: true,
             preserveScroll: true,
         });
@@ -73,6 +77,56 @@ export default function Dashboard({ auth, stats, charts, recent_orders, filters 
     const safeStats = stats || {};
     const safeCharts = charts || { revenue: [], categories: [] };
     const safeOrders = recent_orders || [];
+    const safeDeliveryOrders = delivery_orders || [];
+
+    // Reusable Component for Order List
+    const OrderList = ({ orders, emptyMessage }) => (
+        <div className="space-y-4">
+            {orders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mb-2 opacity-50" />
+                    <p className="text-sm">{emptyMessage}</p>
+                </div>
+            ) : (
+                orders.map((order) => (
+                    <Link
+                        href={route('admin.orders.show', order.id)}
+                        key={order.id}
+                        className="block group cursor-pointer"
+                    >
+                        <div className="flex items-center justify-between border-b pb-4 group-hover:bg-slate-50 transition-colors p-2 rounded-md -mx-2 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-4">
+                                <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 group-hover:bg-white transition-colors">
+                                    <CreditCard className="h-5 w-5 text-slate-500" />
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-sm font-medium leading-none group-hover:text-blue-600 transition-colors">
+                                        {order.customer}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">{order.email}</p>
+                                </div>
+                            </div>
+                            <div className="hidden md:block text-sm text-muted-foreground capitalize">
+                                {order.service}
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                    <p className="text-sm font-medium">{formatCurrency(order.amount)}</p>
+                                    <p className="text-xs text-muted-foreground">{order.date}</p>
+                                </div>
+                                <Badge variant={
+                                    order.status === 'paid' ? 'default' :
+                                    order.status === 'settlement' ? 'success' : 'secondary'
+                                }>
+                                    {order.status}
+                                </Badge>
+                            </div>
+                        </div>
+                    </Link>
+                ))
+            )}
+        </div>
+    );
 
     return (
         <AuthenticatedLayout user={auth.user} header="Overview">
@@ -140,28 +194,29 @@ export default function Dashboard({ auth, stats, charts, recent_orders, filters 
                         </CardContent>
                     </Card>
 
-                    {/* Action Items */}
-                    <Card className="border-l-4 border-l-orange-500">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Action Required</CardTitle>
-                            <Activity className="h-4 w-4 text-orange-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-sm text-muted-foreground">Needs Delivery</span>
-                                <span className="font-bold text-orange-600">{safeStats.needs_delivery || 0}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Pending Refunds</span>
-                                <span className="font-bold text-red-600">{safeStats.pending_refunds || 0}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    {/* Action Items (Clickable) */}
+                    <Link href={route('admin.orders.index')}>
+                        <Card className="border-l-4 border-l-orange-500 hover:bg-slate-50 transition-colors cursor-pointer h-full">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Action Required</CardTitle>
+                                <Activity className="h-4 w-4 text-orange-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-sm text-muted-foreground">Needs Delivery</span>
+                                    <span className="font-bold text-orange-600">{safeStats.needs_delivery || 0}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Pending Refunds</span>
+                                    <span className="font-bold text-red-600">{safeStats.pending_refunds || 0}</span>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
                 </div>
 
                 {/* 2. CHARTS SECTION */}
                 <div className="grid gap-4 md:grid-cols-7">
-
                     {/* Revenue Bar Chart */}
                     <Card className="col-span-4">
                         <CardHeader>
@@ -243,51 +298,52 @@ export default function Dashboard({ auth, stats, charts, recent_orders, filters 
                     </Card>
                 </div>
 
-                {/* 3. RECENT ORDERS TABLE */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <div>
-                            <CardTitle>Recent Orders</CardTitle>
-                            <CardDescription>Latest transactions from your customers.</CardDescription>
-                        </div>
+                {/* 3. ORDER ACTIVITY SECTION (TABS) */}
+                <Tabs defaultValue="recent" className="w-full">
+                    <div className="flex items-center justify-between mb-2">
+                        <TabsList>
+                            <TabsTrigger value="recent">Recent Orders</TabsTrigger>
+                            <TabsTrigger value="delivery" className="relative">
+                                Needs Delivery
+                                {safeDeliveryOrders.length > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full border border-white"></span>
+                                )}
+                            </TabsTrigger>
+                        </TabsList>
                         <Button variant="outline" size="sm" asChild>
-                            <Link href={route('admin.orders.index')}>View All</Link>
+                            <Link href={route('admin.orders.index')}>View All Orders</Link>
                         </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {safeOrders.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">No recent orders found.</p>
-                            ) : (
-                                safeOrders.map((order) => (
-                                    <div key={order.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                                        <div className="flex items-center gap-4">
-                                            <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">
-                                                <CreditCard className="h-5 w-5 text-slate-500" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-sm font-medium leading-none">{order.customer}</p>
-                                                <p className="text-xs text-muted-foreground">{order.email}</p>
-                                            </div>
-                                        </div>
-                                        <div className="hidden md:block text-sm text-muted-foreground capitalize">
-                                            {order.service}
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right">
-                                                <p className="text-sm font-medium">{formatCurrency(order.amount)}</p>
-                                                <p className="text-xs text-muted-foreground">{order.date}</p>
-                                            </div>
-                                            <Badge variant={order.status === 'paid' || order.status === 'settlement' ? 'default' : 'secondary'}>
-                                                {order.status}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+                    </div>
+
+                    {/* Tab: Recent Orders */}
+                    <TabsContent value="recent">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Recent Orders</CardTitle>
+                                <CardDescription>Latest transactions from your customers.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <OrderList orders={safeOrders} emptyMessage="No recent orders found." />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Tab: Needs Delivery */}
+                    <TabsContent value="delivery">
+                        <Card className="border-orange-200 bg-orange-50/30">
+                            <CardHeader>
+                                <div className="flex items-center gap-2">
+                                    <Truck className="h-5 w-5 text-orange-600" />
+                                    <CardTitle>Pending Delivery</CardTitle>
+                                </div>
+                                <CardDescription>Orders that have been paid but not yet completed.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <OrderList orders={safeDeliveryOrders} emptyMessage="No orders currently need delivery. Good job!" />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
         </AuthenticatedLayout>
     );

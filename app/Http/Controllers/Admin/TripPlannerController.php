@@ -11,17 +11,12 @@ use Illuminate\Support\Facades\Cache;
 
 class TripPlannerController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        // ✅ CHANGED: Eager load 'bookings' to get payment status
         $planners = TripPlanner::with(['user', 'bookings'])
             ->latest()
             ->paginate(10);
 
-        // Get the general price from settings
         $tripPlannerPrice = Setting::where('key', 'trip_planner_price')->first()->value ?? 0;
 
         return Inertia::render('Admin/TripPlanner/Index', [
@@ -30,7 +25,6 @@ class TripPlannerController extends Controller
         ]);
     }
 
-    // ... (keep updateGeneralPrice, edit, update, etc. exactly as they were)
     public function updateGeneralPrice(Request $request)
     {
         $validated = $request->validate([
@@ -49,22 +43,30 @@ class TripPlannerController extends Controller
 
     public function edit(TripPlanner $tripPlanner)
     {
+        $globalPrice = Setting::where('key', 'trip_planner_price')->value('value') ?? 0;
+
         return Inertia::render('Admin/TripPlanner/Edit', [
             'tripPlanner' => $tripPlanner->load('user'),
+            'globalPrice' => $globalPrice,
         ]);
     }
 
     public function update(Request $request, TripPlanner $tripPlanner)
     {
+        // Fetch Global Price
+        $globalPrice = Setting::where('key', 'trip_planner_price')->value('value') ?? 0;
+
+        // ✅ UPDATED VALIDATION: Added 'In Progress' and 'Accepted' to the allowed statuses
         $validated = $request->validate([
-            'price' => 'required|numeric|min:0',
-            'status' => 'required|string|in:Pending,Approved,Rejected',
+            'status' => 'required|string|in:Pending,In Progress,Accepted,Rejected',
             'notes' => 'nullable|string',
-            'recommendation_content' => 'nullable|string',
         ]);
+
+        // Force the price to match Global Setting
+        $validated['price'] = $globalPrice;
 
         $tripPlanner->update($validated);
 
-        return redirect()->route('admin.planners.index')->with('success', 'Trip Planner updated successfully.');
+        return redirect()->route('admin.planners.index')->with('success', 'Trip Planner status updated.');
     }
 }
