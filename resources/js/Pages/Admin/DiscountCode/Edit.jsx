@@ -6,20 +6,25 @@ import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
 import InputError from '@/Components/InputError';
-import { ArrowLeft, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 
-export default function CreateDiscountCode({ auth }) {
-  const { data, setData, post, processing, errors } = useForm({
-    code: '',
-    type: 'fixed',
-    value: '',
-    max_uses: '',
-    expires_at: '',
+export default function EditDiscountCode({ auth, discountCode }) {
+  // Format initial date to YYYY-MM-DD for the date input
+  const initialDate = discountCode.expires_at
+    ? new Date(discountCode.expires_at).toISOString().split('T')[0]
+    : '';
+
+  const { data, setData, put, processing, errors } = useForm({
+    code: discountCode.code,
+    type: discountCode.type,
+    value: discountCode.value,
+    max_uses: discountCode.max_uses || '',
+    expires_at: initialDate,
   });
 
   const submit = (e) => {
     e.preventDefault();
-    post(route('admin.discount-codes.store'));
+    put(route('admin.discount-codes.update', discountCode.id));
   };
 
   return (
@@ -28,24 +33,24 @@ export default function CreateDiscountCode({ auth }) {
       header={
         <div className="flex items-center gap-4">
           <Link href={route('admin.discount-codes.index')}>
-            <Button variant="outline" size="icon" aria-label="Back to Discount Codes">
+            <Button variant="outline" size="icon">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            Create New Discount Code
+            Edit Discount Code
           </h2>
         </div>
       }
     >
-      <Head title="Create Discount Code" />
+      <Head title={`Edit ${data.code}`} />
 
       <div className="py-12">
         <div className="max-w-2xl mx-auto sm:px-6 lg:px-8">
           <Card>
             <CardHeader>
-              <CardTitle>Discount Code Details</CardTitle>
-              <CardDescription>Fill in the details for the new discount code.</CardDescription>
+              <CardTitle>Edit Code: {discountCode.code}</CardTitle>
+              <CardDescription>Update the discount code details.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={submit} className="space-y-6">
@@ -124,8 +129,8 @@ export default function CreateDiscountCode({ auth }) {
 
                 <div className="flex justify-end">
                   <Button type="submit" disabled={processing}>
-                    <PlusCircle className="w-4 h-4 mr-2" />
-                    {processing ? 'Creating...' : 'Create Code'}
+                    <Save className="w-4 h-4 mr-2" />
+                    {processing ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
               </form>

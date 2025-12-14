@@ -1,8 +1,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
 import {
     Users,
     CreditCard,
@@ -26,9 +27,26 @@ import {
     Legend
 } from 'recharts';
 
-export default function Dashboard({ auth, stats, charts, recent_orders }) {
+export default function Dashboard({ auth, stats, charts, recent_orders, filters }) {
 
-    // Safely format currency. If amount is invalid, defaults to 0.
+    const currentRange = filters?.range || 'month';
+
+    const onRangeChange = (value) => {
+        router.get(route('dashboard'), { range: value }, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
+
+    const getRangeLabel = (range) => {
+        switch(range) {
+            case 'today': return 'yesterday';
+            case 'week': return 'last week';
+            case 'year': return 'last year';
+            default: return 'last month';
+        }
+    }
+
     const formatCurrency = (amount) => {
         const value = Number(amount) || 0;
         return new Intl.NumberFormat('id-ID', {
@@ -41,19 +59,17 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
 
     const COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#f97316', '#8b5cf6'];
 
-    // Helper for Growth Indicator
     const GrowthIndicator = ({ value }) => {
         const numValue = Number(value) || 0;
         const isPositive = numValue >= 0;
         return (
             <div className={`flex items-center text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
                 {isPositive ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-                {Math.abs(numValue)}% from last month
+                {Math.abs(numValue)}% from {getRangeLabel(currentRange)}
             </div>
         );
     };
 
-    // Default values in case props are missing
     const safeStats = stats || {};
     const safeCharts = charts || { revenue: [], categories: [] };
     const safeOrders = recent_orders || [];
@@ -63,6 +79,26 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
             <Head title="Dashboard" />
 
             <div className="py-6 space-y-6">
+
+                {/* HEADER & FILTERS */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 className="text-xl font-semibold leading-tight text-gray-800">
+                        Dashboard Stats
+                    </h2>
+                    <div className="w-[180px]">
+                        <Select defaultValue={currentRange} onValueChange={onRangeChange}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select period" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="week">Last 7 Days</SelectItem>
+                                <SelectItem value="month">Last 30 Days</SelectItem>
+                                <SelectItem value="year">Last Year</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
 
                 {/* 1. KEY METRICS ROW */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -86,7 +122,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{safeStats.total_orders || 0}</div>
-                            <p className="text-xs text-muted-foreground">Lifetime orders</p>
+                            <p className="text-xs text-muted-foreground capitalize">In selected period</p>
                         </CardContent>
                     </Card>
 
@@ -99,7 +135,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
                         <CardContent>
                             <div className="text-2xl font-bold">{safeStats.total_clients || 0}</div>
                             <p className="text-xs text-muted-foreground">
-                                +{safeStats.new_clients || 0} new this month
+                                +{safeStats.new_clients || 0} new in period
                             </p>
                         </CardContent>
                     </Card>
@@ -126,11 +162,11 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
                 {/* 2. CHARTS SECTION */}
                 <div className="grid gap-4 md:grid-cols-7">
 
-                    {/* Revenue Bar Chart (Span 4 cols) */}
+                    {/* Revenue Bar Chart */}
                     <Card className="col-span-4">
                         <CardHeader>
                             <CardTitle>Revenue Overview</CardTitle>
-                            <CardDescription>Monthly revenue for the last 6 months</CardDescription>
+                            <CardDescription className="capitalize">Breakdown for {currentRange === 'month' ? 'last 30 days' : currentRange}</CardDescription>
                         </CardHeader>
                         <CardContent className="pl-2">
                             <div className="h-[300px] w-full">
@@ -162,18 +198,18 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
                                     </ResponsiveContainer>
                                 ) : (
                                     <div className="flex h-full items-center justify-center text-muted-foreground">
-                                        No revenue data available (Check Transactions)
+                                        No revenue data available
                                     </div>
                                 )}
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Category Pie Chart (Span 3 cols) */}
+                    {/* Category Pie Chart */}
                     <Card className="col-span-3">
                         <CardHeader>
                             <CardTitle>Sales by Category</CardTitle>
-                            <CardDescription>Distribution across services</CardDescription>
+                            <CardDescription>Distribution in selected period</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="h-[300px] w-full">
@@ -199,7 +235,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders }) {
                                     </ResponsiveContainer>
                                 ) : (
                                     <div className="flex h-full items-center justify-center text-muted-foreground">
-                                        No category data available (Check Orders)
+                                        No sales in this period
                                     </div>
                                 )}
                             </div>

@@ -16,9 +16,10 @@ use Midtrans\Config;
 use Midtrans\Snap;
 use Midtrans\Notification;
 use Carbon\Carbon;
-use App\Models\User; // ✅ ADD THIS
-use App\Notifications\NewOrderAdminNotification; // ✅ ADD THIS
-use Illuminate\Support\Facades\Notification as LaravelNotification; // ✅ ADD THIS (Alias to avoid conflict with Midtrans)
+use App\Models\User;
+use App\Notifications\NewOrderAdminNotification;
+use Illuminate\Support\Facades\Notification as LaravelNotification;
+
 class PaymentController extends Controller
 {
     public function __construct()
@@ -97,8 +98,7 @@ class PaymentController extends Controller
                 $item_details = [];
 
                 if ($isPartialPayment) {
-                    // ✅ FIXED: For DP/Balance, send a SINGLE consolidated item.
-                    // This prevents "buying 3 times" and rounding errors.
+                    // For DP/Balance, send a SINGLE consolidated item.
                     $item_details[] = [
                         'id'       => 'PAY-' . $transaction->id,
                         'price'    => (int) $amountToCharge,
@@ -106,8 +106,7 @@ class PaymentController extends Controller
                         'name'     => $transactionNote === 'down_payment' ? "Down Payment (50%)" : "Remaining Balance",
                     ];
                 } else {
-                    // ✅ FIXED: For Full Payment, list items with their ACTUAL prices.
-                    // Previously, this loop set every item's price to the Total Order Amount.
+                    // For Full Payment, list items with their prices
                     foreach ($order->orderItems as $item) {
                         $itemName = $item->name ?? 'Service';
 
@@ -118,9 +117,21 @@ class PaymentController extends Controller
 
                         $item_details[] = [
                             'id'       => 'ITEM-' . $item->id,
-                            'price'    => (int) $item->price,     // Use ITEM price, not total
-                            'quantity' => (int) $item->quantity,  // Use ITEM quantity
+                            'price'    => (int) $item->price,
+                            'quantity' => (int) $item->quantity,
                             'name'     => substr($itemName, 0, 50),
+                        ];
+                    }
+
+                    // ✅ FIXED: Add Negative Line Item for Discount
+                    // Midtrans requires sum(item_details) == gross_amount.
+                    // If we have a discount, we must subtract it from the item list.
+                    if ($order->discount_amount > 0) {
+                        $item_details[] = [
+                            'id'       => 'DISCOUNT',
+                            'price'    => -((int) $order->discount_amount),
+                            'quantity' => 1,
+                            'name'     => 'Discount Applied',
                         ];
                     }
                 }
@@ -281,10 +292,9 @@ class PaymentController extends Controller
                 }
             });
 
-            // ✅ SEND EMAIL NOTIFICATION (Outside transaction to prevent delay/rollback issues)
+            // ✅ SEND EMAIL NOTIFICATION
             if ($shouldNotifyAdmin) {
                 try {
-                    // Fetch all admins using the constant from your User model
                     $admins = User::where('role', User::ROLE_ADMIN)->get();
 
                     if ($admins->count() > 0) {
@@ -292,7 +302,6 @@ class PaymentController extends Controller
                         Log::info('Admin notification email queued for Order #' . $order->order_number);
                     }
                 } catch (\Exception $e) {
-                    // Log error but don't fail the webhook response
                     Log::error('Failed to send admin notification: ' . $e->getMessage());
                 }
             }
@@ -304,6 +313,7 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Internal error'], 500);
         }
     }
+
     protected function releaseAvailability(Order $order)
     {
         if ($order->booking && $order->booking->bookable instanceof CarRental) {

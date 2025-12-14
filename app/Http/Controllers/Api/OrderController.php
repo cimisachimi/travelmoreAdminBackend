@@ -18,14 +18,14 @@ class OrderController extends Controller
     {
         $user = Auth::user();
 
-        // ✅ FIXED: Load 'transactions' (plural) and 'booking.bookable'
-        // We also eager-load all relations the frontend needs.
+        // ✅ FIXED: Added 'discountCode' to eager loading
         $orders = Order::with([
-                'booking.bookable', // Gets the CarRental/HolidayPackage info
-                'transactions'      // Gets all payment attempts
+                'booking.bookable',
+                'transactions',
+                'discountCode'
             ])
             ->where('user_id', $user->id)
-            ->latest() // Show newest orders first
+            ->latest()
             ->get();
 
         return response()->json($orders);
@@ -38,18 +38,11 @@ class OrderController extends Controller
     {
         $user = Auth::user();
 
-        // ✅ FIXED: Load 'transactions' (plural)
-        $order = Order::with(['booking.bookable', 'transactions'])
+        // ✅ FIXED: Added 'discountCode' to eager loading
+        $order = Order::with(['booking.bookable', 'transactions', 'discountCode'])
             ->where('user_id', $user->id)
             ->findOrFail($id);
 
         return response()->json($order);
     }
-
-    /**
-     * 🛑 NOTE: The store() method has been removed.
-     * Order creation is now correctly handled by controllers like
-     * BookingController (e.g., storeCarRentalBooking)
-     * to ensure all items (Order, OrderItem, Booking) are created together.
-     */
 }
