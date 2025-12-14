@@ -24,6 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             ApplySecurityHeaders::class,
         ]);
+        // ✅ ADD THIS SECTION: API Middleware Group
+        $middleware->api(append: [
+            SetLocaleFromHeader::class, // <-- Add this here so API checks the language header
+        ]);
 
         // This keeps your custom 'admin' alias.
         $middleware->alias([

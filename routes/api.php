@@ -20,6 +20,8 @@ use App\Http\Controllers\Api\SocialiteController; // Add this import
 use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
 use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
 use App\Http\Controllers\Api\Public\OpenTripController; // Import Controller
+use App\Http\Controllers\Api\Public\GalleryController; // Don't forget to import this!
+
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -66,6 +68,8 @@ Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 've
     ->middleware(['signed', 'throttle:6,1']); // 'signed' middleware is crucial for security
 
 Route::get('/public/planner-config', [PlannerController::class, 'getConfig']);
+
+Route::get('/public/galleries', [GalleryController::class, 'index']);
 /*
 
 

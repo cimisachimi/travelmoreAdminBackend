@@ -17,6 +17,8 @@ use App\Http\Controllers\Admin\PostController as AdminPostController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController; // ✅ ADD THIS
 use App\Http\Controllers\Admin\OpenTripController as AdminOpenTripController; // ✅ Add this
 use App\Http\Controllers\Admin\RefundController;
+
+use App\Http\Controllers\Admin\GalleryController;
 // Import the missing models
 use App\Models\User;
 use App\Models\HolidayPackage;
@@ -98,6 +100,8 @@ Route::middleware('auth')->group(function () {
 
 
         Route::resource('posts', AdminPostController::class)->names('posts');
+
+        Route::resource('galleries', GalleryController::class);
 
     // --- OPEN TRIPS (Corrected to use AdminOpenTripController) ---
 

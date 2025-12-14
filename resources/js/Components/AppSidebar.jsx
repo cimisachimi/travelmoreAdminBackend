@@ -11,8 +11,9 @@ import {
   Activity,
   TicketPercent,
   Newspaper,
-  RefreshCcw, // Added for Refunds
-  Map         // Added for Open Trips
+  RefreshCcw,
+  Map,
+  Image // ✅ Added Image Icon
 } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
@@ -38,7 +39,7 @@ const serviceItems = [
   { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
   { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
   { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
-  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Map }, // Changed icon to Map
+  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Map },
 ];
 
 // 3. Management Group
@@ -46,9 +47,10 @@ const managementItems = [
   { name: 'admin.orders.index', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
   { name: 'admin.discount-codes.index', title: "Discount Codes", url: route('admin.discount-codes.index'), icon: TicketPercent },
   { name: 'admin.posts.index', title: "Blog Posts", url: route('admin.posts.index'), icon: Newspaper },
+  { name: 'admin.galleries.index', title: "Gallery", url: route('admin.galleries.index'), icon: Image }, // ✅ Added Gallery Item
   { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
   { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
-  { name: 'admin.refunds.index', title: "Refunds", url: route('admin.refunds.index'), icon: RefreshCcw }, // Formatted to match others
+  { name: 'admin.refunds.index', title: "Refunds", url: route('admin.refunds.index'), icon: RefreshCcw },
 ];
 
 export function AppSidebar({ user }) {
