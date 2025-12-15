@@ -43,6 +43,9 @@ class TripPlannerController extends Controller
 
     public function edit(TripPlanner $tripPlanner)
     {
+        // Load bookings to check payment status
+        $tripPlanner->load('bookings');
+
         $globalPrice = Setting::where('key', 'trip_planner_price')->value('value') ?? 0;
 
         return Inertia::render('Admin/TripPlanner/Edit', [
@@ -53,20 +56,19 @@ class TripPlannerController extends Controller
 
     public function update(Request $request, TripPlanner $tripPlanner)
     {
-        // Fetch Global Price
         $globalPrice = Setting::where('key', 'trip_planner_price')->value('value') ?? 0;
 
-        // ✅ UPDATED VALIDATION: Added 'In Progress' and 'Accepted' to the allowed statuses
+        // ✅ Validate against the new workflow statuses
         $validated = $request->validate([
-            'status' => 'required|string|in:Pending,In Progress,Accepted,Rejected',
+            'status' => 'required|string|in:pending,drafting,sent_to_client,revision,completed,rejected',
             'notes' => 'nullable|string',
         ]);
 
-        // Force the price to match Global Setting
+        // Force price to match global setting
         $validated['price'] = $globalPrice;
 
         $tripPlanner->update($validated);
 
-        return redirect()->route('admin.planners.index')->with('success', 'Trip Planner status updated.');
+        return redirect()->route('admin.planners.index')->with('success', 'Trip Planner updated successfully.');
     }
 }

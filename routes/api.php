@@ -21,7 +21,7 @@ use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
 use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
 use App\Http\Controllers\Api\Public\OpenTripController; // Import Controller
 use App\Http\Controllers\Api\Public\GalleryController; // Don't forget to import this!
-
+use App\Http\Controllers\Api\Public\BannerController; // ✅ ADDED THIS IMPORT
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
@@ -58,7 +58,7 @@ Route::post('/midtrans/notification', [PaymentController::class, 'notificationHa
 // ✅ ADD THESE TWO NEW ROUTES FOR THE BLOG
 Route::get('/public/posts', [PublicPostController::class, 'index']);
 Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
-
+Route::get('/public/banner', [BannerController::class, 'index']); // ✅ ADDED THIS ROUTE
 // SOCIALITE AUTH ROUTES
 Route::get('/auth/{provider}/redirect', [SocialiteController::class, 'redirectToProvider']);
 Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProviderCallback']);

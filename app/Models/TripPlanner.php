@@ -46,7 +46,8 @@ class TripPlanner extends Model
         'is_frequent_traveler',
         'travel_type',
         'price',
-        // 'recommendation_content', // REMOVED
+        'status', // ✅ Added
+        'notes',  // ✅ Added
     ];
 
     protected $casts = [

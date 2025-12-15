@@ -77,6 +77,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/car-rentals/{carRental}/thumbnail', [AdminCarRentalController::class, 'updateThumbnail'])->name('rentals.thumbnail.update');
         Route::resource('car-rentals', AdminCarRentalController::class)->names('rentals');
 
+
+        Route::post('/discount-codes/{discountCode}/toggle-banner', [AdminDiscountCodeController::class, 'toggleBanner'])
+    ->name('discount-codes.toggle-banner');
         Route::resource('discount-codes', AdminDiscountCodeController::class)->names('discount-codes');
         Route::resource('posts', AdminPostController::class)->names('posts');
         Route::resource('galleries', GalleryController::class);

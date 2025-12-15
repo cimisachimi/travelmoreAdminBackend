@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Refund;
+use App\Models\TripPlanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -19,7 +20,7 @@ class DashboardController extends Controller
     {
         $range = $request->input('range', 'month');
 
-        // [ ... Date Range Switch Logic remains the same ... ]
+        // [ ... Date Range Logic remains the same ... ]
         switch ($range) {
             case 'today':
                 $startDate = Carbon::today();
@@ -75,12 +76,10 @@ class DashboardController extends Controller
             ->where('created_at', '>=', $startDate)
             ->count();
 
-        // Operational Needs
         $needsDelivery = Order::whereIn('status', ['paid', 'partially_paid'])->count();
         $pendingRefunds = class_exists(Refund::class) ? Refund::where('status', 'pending')->count() : 0;
 
         // --- 2. CHARTS DATA ---
-        // [ ... Charts Logic remains the same ... ]
         $revenueChart = Transaction::where('status', 'settlement')
             ->where('created_at', '>=', $startDate)
             ->select(
@@ -118,9 +117,8 @@ class DashboardController extends Controller
                 return ['name' => $formattedName, 'value' => (int)$item->count];
             });
 
-        // --- 3. RECENT ACTIVITY & NEEDS DELIVERY ---
+        // --- 3. RECENT ACTIVITY & LISTS ---
 
-        // Helper Closure to format order data consistently
         $formatOrderData = function ($order) {
             $serviceName = 'Unknown';
             if ($order->orderItems->isNotEmpty()) {
@@ -128,32 +126,58 @@ class DashboardController extends Controller
                 $serviceName = trim(preg_replace('/(?<!\ )[A-Z]/', ' $0', $type));
             }
 
+            // ✅ Extract Payment Method safely
+            $paymentMethod = 'N/A';
+            if ($order->transaction) {
+                $paymentMethod = $order->transaction->payment_type ?? 'Manual';
+            }
+
             return [
                 'id' => $order->id,
                 'order_number' => $order->order_number,
                 'customer' => $order->user->name ?? 'Guest',
+                'customer_initials' => strtoupper(substr($order->user->name ?? 'G', 0, 2)), // ✅ For Avatar
                 'email' => $order->user->email ?? '-',
                 'amount' => (float)$order->total_amount,
                 'status' => $order->status,
                 'service' => $serviceName,
-                'date' => $order->created_at->diffForHumans(),
+                'payment_method' => ucwords(str_replace('_', ' ', $paymentMethod)), // ✅ Clean format
+                'date_formatted' => $order->created_at->format('d M Y, H:i'), // ✅ Precise date
+                'date_relative' => $order->created_at->diffForHumans(),
             ];
         };
 
-        // Recent Orders
-        $recentOrders = Order::with(['user', 'orderItems'])
+        // ✅ Eager load 'transaction' for payment info
+        $recentOrders = Order::with(['user', 'orderItems', 'transaction'])
             ->latest()
             ->take(5)
             ->get()
             ->map($formatOrderData);
 
-        // Orders Needing Delivery (Paid but not yet settled/completed)
-        $deliveryOrders = Order::with(['user', 'orderItems'])
+        $deliveryOrders = Order::with(['user', 'orderItems', 'transaction'])
             ->whereIn('status', ['paid', 'partially_paid'])
-            ->oldest() // Oldest first to prioritize backlog
+            ->oldest() // Oldest first to prioritize
             ->take(5)
             ->get()
             ->map($formatOrderData);
+
+        $activeTripPlanners = TripPlanner::whereIn('status', ['pending', 'drafting', 'revision', 'sent_to_client'])
+            ->with(['user', 'bookings'])
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(function ($planner) {
+                $isPaid = $planner->bookings->contains(fn($b) => in_array($b->payment_status, ['paid', 'partial']));
+                return [
+                    'id' => $planner->id,
+                    'customer' => $planner->full_name ?? $planner->user->name ?? 'Guest',
+                    'email' => $planner->email ?? $planner->user->email ?? '-',
+                    'destination' => $planner->city ? "{$planner->city}, {$planner->province}" : 'Custom Destination',
+                    'status' => $planner->status ?? 'pending',
+                    'date' => $planner->created_at->diffForHumans(),
+                    'is_paid' => $isPaid,
+                ];
+            });
 
         return Inertia::render('Dashboard', [
             'stats' => [
@@ -170,7 +194,8 @@ class DashboardController extends Controller
                 'categories' => $categoryChart,
             ],
             'recent_orders' => $recentOrders,
-            'delivery_orders' => $deliveryOrders, // New Data
+            'delivery_orders' => $deliveryOrders,
+            'active_planners' => $activeTripPlanners,
             'filters' => [
                 'range' => $range
             ]

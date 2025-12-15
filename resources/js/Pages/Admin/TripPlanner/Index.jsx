@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/Com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import { Button } from '@/Components/ui/button';
-import { MoreHorizontal, Users, MapPin, Calendar, Clock, CreditCard, Phone, CheckCircle, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Users, MapPin, Calendar, Clock, CreditCard, PenTool, Send, RotateCcw, CheckCircle } from 'lucide-react';
 import { Badge } from '@/Components/ui/badge';
 import Pagination from '@/Components/Pagination';
 import { Label } from '@/Components/ui/label';
@@ -20,29 +20,24 @@ const formatCurrency = (amount) => {
     }).format(amount || 0);
 };
 
-// ✅ UPDATED: Detailed Status Badges
+// ✅ UPDATED: Status Badges for Workflow
 const getAdminStatusBadge = (status) => {
-    switch (status) {
-        case 'Accepted': // Client Accepted
-            return <Badge className="bg-emerald-600 hover:bg-emerald-700 gap-1"><CheckCircle size={12}/> Client Accepted</Badge>;
-        case 'In Progress': // Currently communicating
-            return <Badge className="bg-blue-600 hover:bg-blue-700 gap-1"><Loader2 size={12} className="animate-spin"/> In Progress</Badge>;
-        case 'Rejected':
-            return <Badge variant="destructive">Rejected</Badge>;
-        case 'Pending':
-        default: // Default state = Need to Contact
-            return <Badge className="bg-orange-500 hover:bg-orange-600 gap-1"><Phone size={12}/> Need Contact</Badge>;
+    const s = status ? status.toLowerCase() : 'pending';
+    switch (s) {
+        case 'completed': return <Badge className="bg-emerald-600 hover:bg-emerald-700 gap-1"><CheckCircle size={12}/> Done</Badge>;
+        case 'drafting': return <Badge className="bg-blue-600 hover:bg-blue-700 gap-1"><PenTool size={12}/> Crafting Trip</Badge>;
+        case 'sent_to_client': return <Badge className="bg-purple-600 hover:bg-purple-700 gap-1"><Send size={12}/> Result Sent</Badge>;
+        case 'revision': return <Badge className="bg-orange-500 hover:bg-orange-600 gap-1"><RotateCcw size={12}/> Revision</Badge>;
+        case 'rejected': return <Badge variant="destructive">Rejected</Badge>;
+        default: return <Badge variant="secondary" className="text-gray-500">Waiting to Start</Badge>;
     }
 };
 
-// Helper: Payment Status Badge (Paid/Unpaid)
+// Helper: Payment Status Badge
 const getPaymentStatusBadge = (bookings) => {
-    if (!bookings || bookings.length === 0) {
-        return <Badge variant="outline" className="text-gray-500 border-gray-300">Not Booked</Badge>;
-    }
+    if (!bookings || bookings.length === 0) return <Badge variant="outline" className="text-gray-500 border-gray-300">Not Booked</Badge>;
     const sortedBookings = [...bookings].sort((a, b) => b.id - a.id);
-    let booking = sortedBookings.find(b => b.payment_status === 'paid' || b.payment_status === 'partial');
-    if (!booking) booking = sortedBookings[0];
+    let booking = sortedBookings.find(b => b.payment_status === 'paid' || b.payment_status === 'partial') || sortedBookings[0];
 
     switch (booking.payment_status) {
         case 'paid': return <Badge className="bg-emerald-500 hover:bg-emerald-600">Paid</Badge>;
@@ -53,7 +48,6 @@ const getPaymentStatusBadge = (bookings) => {
     }
 };
 
-// Helper: Format Date
 const formatDate = (dateString) => {
     if (!dateString) return <span className="text-gray-400 italic">TBD</span>;
     return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -75,19 +69,12 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
       header={<h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">Trip Planner Submissions</h2>}
     >
       <Head title="Trip Planners" />
-
       <div className="py-12 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-
-        {/* 1. General Settings Card */}
+        {/* Global Price Setting */}
         <Card className="border-l-4 border-l-blue-500 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-blue-500" />
-                Global Pricing Setting
-            </CardTitle>
-            <CardDescription>
-              Set the default consultation fee charged for new trip plans.
-            </CardDescription>
+            <CardTitle className="text-lg flex items-center gap-2"><CreditCard className="w-5 h-5 text-blue-500" />Global Pricing Setting</CardTitle>
+            <CardDescription>Set the fee. Clients must pay this <strong>before</strong> we start crafting the trip.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={submitGeneralPrice} className="flex items-start gap-4 max-w-2xl">
@@ -95,57 +82,44 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                 <Label htmlFor="trip_planner_price">Fee Amount (IDR)</Label>
                 <div className="relative mt-1">
                     <span className="absolute left-3 top-2.5 text-gray-500">Rp</span>
-                    <Input
-                    id="trip_planner_price"
-                    type="number"
-                    value={data.trip_planner_price}
-                    onChange={(e) => setData('trip_planner_price', e.target.value)}
-                    className="pl-10 block w-full"
-                    />
+                    <Input id="trip_planner_price" type="number" value={data.trip_planner_price} onChange={(e) => setData('trip_planner_price', e.target.value)} className="pl-10 block w-full" />
                 </div>
                 <InputError message={errors.trip_planner_price} className="mt-2" />
               </div>
               <div className="mt-7">
-                <Button disabled={processing}>
-                  {processing ? 'Saving...' : 'Update Price'}
-                </Button>
-                {recentlySuccessful && (
-                  <span className="ml-3 text-sm text-green-600 font-medium animate-pulse">Saved!</span>
-                )}
+                <Button disabled={processing}>{processing ? 'Saving...' : 'Update Price'}</Button>
+                {recentlySuccessful && <span className="ml-3 text-sm text-green-600 font-medium animate-pulse">Saved!</span>}
               </div>
             </form>
           </CardContent>
         </Card>
 
-        {/* 2. Submissions Table */}
+        {/* Submissions Table */}
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Trip Requests</CardTitle>
-            <CardDescription>Manage incoming custom trip itinerary requests.</CardDescription>
+            <CardDescription>Manage requests following the flow: Pay → Craft → Send → Revision → Done.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[200px]">Traveler</TableHead>
-                  <TableHead className="w-[250px]">Destination & Style</TableHead>
-                  <TableHead className="w-[200px]">Timing</TableHead>
-                  <TableHead>Current Status</TableHead>
+                  <TableHead>Traveler</TableHead>
+                  <TableHead>Destination & Style</TableHead>
+                  <TableHead>Timing</TableHead>
                   <TableHead>Payment</TableHead>
+                  <TableHead>Workflow Status</TableHead>
                   <TableHead className="text-right">Submitted</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {planners.data.length === 0 ? (
-                    <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No trip requests found.</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No trip requests found.</TableCell></TableRow>
                 ) : (
                     planners.data.map((planner) => {
                         const totalPax = (parseInt(planner.pax_adults) || 0) + (parseInt(planner.pax_teens) || 0) + (parseInt(planner.pax_kids) || 0) + (parseInt(planner.pax_seniors) || 0);
                         const destination = [planner.city, planner.province].filter(Boolean).join(', ') || "Unspecified";
-
                         return (
                         <TableRow key={planner.id}>
                             <TableCell>
@@ -153,55 +127,21 @@ export default function TripPlannerIndex({ auth, planners, tripPlannerPrice }) {
                                 <div className="text-xs text-muted-foreground">{planner.email}</div>
                                 <div className="text-xs text-muted-foreground">{planner.phone}</div>
                             </TableCell>
-
                             <TableCell>
-                                <div className="flex items-center gap-1.5 font-medium text-sm">
-                                    <MapPin size={14} className="text-blue-500" />
-                                    {destination}
-                                </div>
-                                <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
-                                    <Users size={12} />
-                                    <span>{totalPax} Pax ({planner.pax_adults || 0}A / {planner.pax_kids || 0}C)</span>
-                                </div>
-                                <div className="mt-0.5 text-xs bg-gray-100 dark:bg-gray-800 w-fit px-1.5 py-0.5 rounded">{planner.trip_type || 'General'}</div>
+                                <div className="flex items-center gap-1.5 font-medium text-sm"><MapPin size={14} className="text-blue-500" />{destination}</div>
+                                <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1"><Users size={12} /><span>{totalPax} Pax</span></div>
                             </TableCell>
-
                             <TableCell>
-                                <div className="flex items-center gap-1.5 text-sm">
-                                    <Calendar size={14} className="text-gray-400" />
-                                    {formatDate(planner.departure_date)}
-                                </div>
-                                {planner.duration && (
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1"><Clock size={12} />{planner.duration}</div>
-                                )}
+                                <div className="flex items-center gap-1.5 text-sm"><Calendar size={14} className="text-gray-400" />{formatDate(planner.departure_date)}</div>
                             </TableCell>
-
-                            {/* ✅ UPDATED: Status Column */}
-                            <TableCell>
-                                {getAdminStatusBadge(planner.status)}
-                                <div className="mt-1 text-xs font-medium text-gray-500">{formatCurrency(planner.price)}</div>
-                            </TableCell>
-
                             <TableCell>{getPaymentStatusBadge(planner.bookings)}</TableCell>
-
-                            <TableCell className="text-right text-xs text-muted-foreground">
-                                {new Date(planner.created_at).toLocaleDateString()}
-                                <br />
-                                {new Date(planner.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </TableCell>
-
+                            <TableCell>{getAdminStatusBadge(planner.status)}</TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">{new Date(planner.created_at).toLocaleDateString()}</TableCell>
                             <TableCell>
                                 <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                        <span className="sr-only">Open menu</span>
-                                        <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                    </DropdownMenuTrigger>
+                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                    <DropdownMenuItem asChild>
-                                        <Link href={route("admin.planners.edit", planner.id)} className="cursor-pointer font-medium">Manage & Update</Link>
-                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild><Link href={route("admin.planners.edit", planner.id)} className="cursor-pointer font-medium">Manage</Link></DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </TableCell>
