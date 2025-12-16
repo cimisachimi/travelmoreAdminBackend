@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http; // Make sure this is imported
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 
 class OrderController extends Controller
@@ -13,37 +13,38 @@ class OrderController extends Controller
     /**
      * Display a listing of the resource.
      */
-public function index(Request $request)
-{
-    $query = Order::with(['user', 'orderItems', 'transaction']);
+    public function index(Request $request)
+    {
+        $query = Order::with(['user', 'orderItems', 'transaction']);
 
-    // --- 1. Sorting Logic ---
-    if ($request->has('sort') && $request->has('direction')) {
-        $sort = $request->input('sort');
-        $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
+        // --- 1. Sorting Logic ---
+        if ($request->has('sort') && $request->has('direction')) {
+            $sort = $request->input('sort');
+            $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
 
-        if ($sort === 'user.name') {
-            // Sort by related User name
-            $query->join('users', 'orders.user_id', '=', 'users.id')
-                  ->orderBy('users.name', $direction)
-                  ->select('orders.*'); // Avoid overwriting IDs
+            if ($sort === 'user.name') {
+                // Sort by related User name
+                $query->join('users', 'orders.user_id', '=', 'users.id')
+                      ->orderBy('users.name', $direction)
+                      ->select('orders.*'); // Avoid overwriting IDs
+            } else {
+                // Sort by direct Order columns
+                $query->orderBy($sort, $direction);
+            }
         } else {
-            // Sort by direct Order columns
-            $query->orderBy($sort, $direction);
+            // Default sort: Date Descending
+            $query->latest();
         }
-    } else {
-        // Default sort: Date Descending
-        $query->latest();
+
+        $orders = $query->paginate(10)->withQueryString(); // Persist params in pagination links
+
+        return Inertia::render('Admin/Order/Index', [
+            'orders' => $orders,
+            // Pass current sort state back to frontend
+            'filters' => $request->only(['sort', 'direction']),
+        ]);
     }
 
-    $orders = $query->paginate(10)->withQueryString(); // Persist params in pagination links
-
-    return Inertia::render('Admin/Order/Index', [
-        'orders' => $orders,
-        // Pass current sort state back to frontend
-        'filters' => $request->only(['sort', 'direction']),
-    ]);
-}
     /**
      * Show the specified order.
      */
@@ -52,9 +53,9 @@ public function index(Request $request)
         // Eager load all data for the detail view
         $order->load([
             'user',
-            'orderItems', // Use 'orderItems'
-            'transaction', // Gets the 'settlement' transaction
-            'transactions', // Gets ALL transactions (to find refunds, etc.)
+            'orderItems.orderable', // ✅ CHANGED: Loads the actual Activity/Car/Package model
+            'transaction',          // Gets the 'settlement' transaction
+            'transactions',         // Gets ALL transactions (to find refunds, etc.)
             'booking.bookable'
         ]);
 

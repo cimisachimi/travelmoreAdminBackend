@@ -60,7 +60,7 @@ const ServiceBadge = ({ type }) => {
     const Icon = icon;
 
     return (
-        <Badge variant="outline" className={`gap-1.5 py-1 ${className}`}>
+        <Badge variant="outline" className={`gap-1.5 py-1 font-medium ${className}`}>
             <Icon className="w-3 h-3" />
             {label}
         </Badge>
@@ -88,18 +88,25 @@ const formatDate = (dateString) => {
     });
 };
 
+// ✅ UPDATED: Consistent Status Badge with Show.jsx
 const getStatusBadge = (status) => {
-    switch (status) {
-        case "pending": return <Badge variant="outline">Pending</Badge>;
-        case "paid":
-        case "settlement": return <Badge className="bg-green-600 text-white hover:bg-green-700">Paid</Badge>;
-        case "partially_paid": return <Badge className="bg-yellow-500 text-white hover:bg-yellow-600">Partial</Badge>;
-        case "refund": return <Badge className="bg-blue-600 text-white hover:bg-blue-700">Refunded</Badge>;
-        case "cancelled":
-        case "expire":
-        case "failure": return <Badge variant="destructive">{status}</Badge>;
-        default: return <Badge variant="secondary">{status || "N/A"}</Badge>;
-    }
+    const styles = {
+        pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        paid: "bg-green-100 text-green-800 border-green-200",
+        settlement: "bg-green-100 text-green-800 border-green-200",
+        partially_paid: "bg-orange-100 text-orange-800 border-orange-200", // Distinct for Down Payment
+        refund: "bg-blue-100 text-blue-800 border-blue-200",
+        cancelled: "bg-red-100 text-red-800 border-red-200",
+        expire: "bg-gray-100 text-gray-800 border-gray-200",
+        failure: "bg-red-100 text-red-800 border-red-200",
+    };
+
+    // Normalize labels
+    let label = status;
+    if (status === 'settlement') label = 'Paid';
+    if (status === 'partially_paid') label = 'Partially Paid';
+
+    return <Badge variant="outline" className={`${styles[status] || "bg-gray-100"} capitalize px-2.5 py-0.5`}>{label || "N/A"}</Badge>;
 };
 
 // --- SORTABLE HEADER COMPONENT ---
@@ -158,10 +165,8 @@ export default function Index({ auth, orders, filters }) {
         });
     };
 
-    // ✅ FIXED: Safe way to display the sort label
     const getSortLabel = (key) => {
         if (!key) return "";
-        // Convert to string explicitly, then replace dots and underscores
         return String(key).replace(/[._]/g, ' ');
     };
 
@@ -239,7 +244,18 @@ export default function Index({ auth, orders, filters }) {
                                 <TableBody>
                                     {orders.data.length > 0 ? (
                                         orders.data.map((order, index) => {
-                                            const serviceType = order.order_items?.[0]?.orderable_type || "Unknown";
+                                            const item = order.order_items?.[0];
+                                            const serviceType = item?.orderable_type || "Unknown";
+                                            // Get name from 'orderable' relationship if available (requires updated Controller), else fallback
+                                            const itemName = item?.orderable?.name || item?.name || "Item Details";
+
+                                            // ✅ CALCULATE DISPLAY STATUS (Detect Down Payment)
+                                            const transactionAmount = Number(order.transaction?.gross_amount) || 0;
+                                            const totalAmount = Number(order.total_amount) || 0;
+                                            const isSettled = ['settlement', 'capture', 'paid'].includes(order.status) || order.transaction?.status === 'settlement';
+
+                                            const isDownPayment = isSettled && transactionAmount > 0 && transactionAmount < totalAmount;
+                                            const displayStatus = isDownPayment ? 'partially_paid' : order.status;
 
                                             return (
                                                 <TableRow key={order.id}>
@@ -254,7 +270,7 @@ export default function Index({ auth, orders, filters }) {
                                                     <TableCell>
                                                         <ServiceBadge type={serviceType} />
                                                         <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate">
-                                                            {order.order_items?.[0]?.name}
+                                                            {itemName}
                                                         </div>
                                                     </TableCell>
 
@@ -265,25 +281,30 @@ export default function Index({ auth, orders, filters }) {
                                                         </div>
                                                     </TableCell>
 
-                                                    <TableCell className="font-bold">
-                                                        {formatCurrency(order.total_amount)}
+                                                    <TableCell>
+                                                        <div className="font-bold">
+                                                            {formatCurrency(order.total_amount)}
+                                                        </div>
+                                                        {/* Show Down Payment info if applicable */}
+                                                        {isDownPayment && (
+                                                            <div className="text-[10px] text-orange-600 font-medium mt-0.5">
+                                                                Paid: {formatCurrency(transactionAmount)}
+                                                            </div>
+                                                        )}
                                                     </TableCell>
 
                                                     <TableCell>
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[10px] uppercase text-muted-foreground">Order</span>
-                                                            {getStatusBadge(order.status)}
-                                                        </div>
+                                                        {getStatusBadge(displayStatus)}
                                                     </TableCell>
 
-                                                    <TableCell className="whitespace-nowrap">
+                                                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                                                         {formatDate(order.created_at)}
                                                     </TableCell>
 
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
                                                             <Link href={route("admin.orders.show", order.id)}>
-                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-slate-100">
                                                                     <Eye className="h-4 w-4" />
                                                                 </Button>
                                                             </Link>

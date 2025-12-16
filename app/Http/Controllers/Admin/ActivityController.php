@@ -193,12 +193,130 @@ class ActivityController extends Controller
         }
     }
 
-    // ... [destroy, updateThumbnail, storeGallery, destroyImage, storeImage, updateTranslations remain unchanged] ...
-    public function destroy(Activity $activity) { /* ... */ }
-    public function updateThumbnail(Request $request, Activity $activity) { /* ... */ }
-    public function storeGallery(Request $request, Activity $activity) { /* ... */ }
-    public function destroyImage(Activity $activity, Image $image) { /* ... */ }
-    protected function storeImage($imageFile, Activity $activity, $type = 'gallery') { /* ... */ }
+   public function destroy(Activity $activity)
+    {
+        try {
+            DB::transaction(function () use ($activity) {
+                $this->deleteImages($activity->images);
+                $activity->delete();
+            });
+
+            return redirect()
+                ->route('admin.activities.index')
+                ->with('success', 'Activity deleted successfully.');
+        } catch (\Throwable $e) {
+            return back()->withErrors([
+                'error' => 'Failed to delete activity.'
+            ]);
+        }
+    }
+
+    /* =======================
+     |  Image Methods
+     ======================= */
+
+    public function updateThumbnail(Request $request, Activity $activity)
+    {
+        $request->validate([
+            'thumbnail' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048'
+        ]);
+
+        try {
+            DB::transaction(function () use ($request, $activity) {
+                $oldThumbnail = $activity->images()
+                    ->where('type', 'thumbnail')
+                    ->first();
+
+                if ($oldThumbnail) {
+                    $this->deleteImageFile($oldThumbnail);
+                    $oldThumbnail->delete();
+                }
+
+                $this->storeImage(
+                    $request->file('thumbnail'),
+                    $activity,
+                    'thumbnail'
+                );
+            });
+
+            return back()->with('success', 'Thumbnail updated.');
+        } catch (\Throwable $e) {
+            return back()->withErrors([
+                'error' => 'Failed to update thumbnail.'
+            ]);
+        }
+    }
+
+    public function storeGallery(Request $request, Activity $activity)
+    {
+        $request->validate([
+            'gallery'   => 'required|array',
+            'gallery.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
+        ]);
+
+        try {
+            DB::transaction(function () use ($request, $activity) {
+                foreach ($request->file('gallery', []) as $imageFile) {
+                    $this->storeImage($imageFile, $activity, 'gallery');
+                }
+            });
+
+            return back()->with('success', 'Gallery updated.');
+        } catch (\Throwable $e) {
+            return back()->withErrors([
+                'error' => 'Failed to update gallery.'
+            ]);
+        }
+    }
+
+    public function destroyImage(Activity $activity, Image $image)
+    {
+        if ($image->imageable_id !== $activity->id) {
+            return back()->withErrors([
+                'error' => 'Image mismatch.'
+            ]);
+        }
+
+        $this->deleteImageFile($image);
+        $image->delete();
+
+        return back()->with('success', 'Image deleted.');
+    }
+
+    /* =======================
+     |  Helper Methods
+     ======================= */
+
+    protected function storeImage($imageFile, Activity $activity, string $type = 'gallery'): void
+    {
+        $fileName = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
+
+        $path = $imageFile->storeAs(
+            "activities/{$type}",
+            $fileName,
+            'public'
+        );
+
+        $activity->images()->create([
+            'url'  => $path,
+            'type' => $type
+        ]);
+    }
+
+    protected function deleteImages($images): void
+    {
+        foreach ($images as $image) {
+            $this->deleteImageFile($image);
+            $image->delete();
+        }
+    }
+
+    protected function deleteImageFile(Image $image): void
+    {
+        if ($image->url) {
+            Storage::disk('public')->delete($image->url);
+        }
+    }
     protected function updateTranslations(Activity $activity, array $translationsData)
     {
         foreach ($translationsData as $locale => $data) {

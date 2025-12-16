@@ -13,7 +13,7 @@ import {
   Newspaper,
   RefreshCcw,
   Map,
-  Image // ✅ Added Image Icon
+  Image
 } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/Components/ui/tooltip';
@@ -34,42 +34,39 @@ import {
 const dashboardItem = { name: 'dashboard', title: "Dashboard", url: route('dashboard'), icon: Home };
 
 // 2. Services Group
+// ✅ NOTE: Using '.*' wildcard ensures sub-pages (Create, Edit) keep the menu highlighted
 const serviceItems = [
-  { name: 'admin.planners.index', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
-  { name: 'admin.packages.index', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
-  { name: 'admin.rentals.index', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
-  { name: 'admin.activities.index', title: "Activities", url: route('admin.activities.index'), icon: Activity },
-  { name: 'admin.open-trips.index', title: "Open Trips", url: route('admin.open-trips.index'), icon: Map },
+  { name: 'admin.planners.*', title: "Trip Planners", url: route('admin.planners.index'), icon: FileText },
+  { name: 'admin.packages.*', title: "Holiday Packages", url: route('admin.packages.index'), icon: Package },
+  { name: 'admin.rentals.*', title: "Car Rentals", url: route('admin.rentals.index'), icon: Car },
+  { name: 'admin.activities.*', title: "Activities", url: route('admin.activities.index'), icon: Activity },
+  { name: 'admin.open-trips.*', title: "Open Trips", url: route('admin.open-trips.index'), icon: Map },
 ];
 
 // 3. Management Group
 const managementItems = [
-  { name: 'admin.orders.index', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
-  { name: 'admin.discount-codes.index', title: "Discount Codes", url: route('admin.discount-codes.index'), icon: TicketPercent },
-  { name: 'admin.posts.index', title: "Blog Posts", url: route('admin.posts.index'), icon: Newspaper },
-  { name: 'admin.galleries.index', title: "Gallery", url: route('admin.galleries.index'), icon: Image }, // ✅ Added Gallery Item
-  { name: 'admin.transactions.index', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
-  { name: 'admin.users.index', title: "Users", url: route('admin.users.index'), icon: Users },
-  { name: 'admin.refunds.index', title: "Refunds", url: route('admin.refunds.index'), icon: RefreshCcw },
+  { name: 'admin.orders.*', title: "Orders", url: route('admin.orders.index'), icon: ShoppingCart },
+  { name: 'admin.discount-codes.*', title: "Discount Codes", url: route('admin.discount-codes.index'), icon: TicketPercent },
+  { name: 'admin.posts.*', title: "Blog Posts", url: route('admin.posts.index'), icon: Newspaper },
+  { name: 'admin.galleries.*', title: "Gallery", url: route('admin.galleries.index'), icon: Image },
+  { name: 'admin.transactions.*', title: "Transactions", url: route('admin.transactions.index'), icon: CreditCard },
+  { name: 'admin.users.*', title: "Users", url: route('admin.users.index'), icon: Users },
+  { name: 'admin.refunds.*', title: "Refunds", url: route('admin.refunds.index'), icon: RefreshCcw },
 ];
 
 export function AppSidebar({ user }) {
   const { isCollapsed } = useSidebar();
-
-  // 2. Get auth user directly from Inertia global props
   const { auth } = usePage().props;
-
-  // 3. Use the prop if available, otherwise fall back to the global auth user
   const currentUser = user || auth.user || { name: 'User', email: '' };
 
-  // Helper to render a list of menu items
   const renderMenuItems = (items) => (
     items.map((item) => (
       <SidebarMenuItem key={item.title}>
         <Tooltip>
           <TooltipTrigger asChild>
             <Link href={item.url}>
-              <SidebarMenuButton isActive={route().current(item.name)}>
+              {/* ✅ FIXED: Changed 'isActive' to 'active' to match your SidebarMenuButton component */}
+              <SidebarMenuButton active={route().current(item.name)}>
                 <item.icon className="h-5 w-5" />
                 {!isCollapsed && <span>{item.title}</span>}
               </SidebarMenuButton>
