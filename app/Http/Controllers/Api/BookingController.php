@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod; // ✅ Added CarbonPeriod for date iteration
+use Carbon\CarbonPeriod;
 use App\Models\HolidayPackage;
 use App\Models\DiscountCode;
 use Illuminate\Validation\ValidationException;
@@ -26,7 +26,132 @@ use App\Models\OpenTrip;
 class BookingController extends Controller
 {
     /**
-     * Store a newly created car rental booking.
+     * 💰 CHECK PRICE & DISCOUNT ENDPOINT
+     * Call this from the frontend "Apply Code" button to preview totals.
+     */
+    public function checkPrice(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:car_rental,activity,holiday_package,open_trip,trip_planner',
+            'id'   => 'required|integer',
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
+
+            // Contextual inputs based on type
+            'start_date' => 'nullable|date',
+            'end_date'   => 'nullable|date',
+            'quantity'   => 'nullable|integer|min:1', // Activity Pax
+            'adults'     => 'nullable|integer|min:1', // Package/Trip Pax
+            'children'   => 'nullable|integer|min:0', // Package/Trip Pax
+            'selected_addons' => 'nullable|array'
+        ]);
+
+        try {
+            $subtotal = 0;
+            $itemName = '';
+
+            // 1. Calculate Subtotal based on Type
+            switch ($validated['type']) {
+                case 'car_rental':
+                    $car = CarRental::findOrFail($validated['id']);
+                    $start = Carbon::parse($validated['start_date']);
+                    $end = Carbon::parse($validated['end_date']);
+                    $days = $start->diffInDays($end) + 1;
+                    $subtotal = $car->price_per_day * $days;
+                    $itemName = "{$car->brand} {$car->car_model} ({$days} Days)";
+                    break;
+
+                case 'activity':
+                    $activity = Activity::findOrFail($validated['id']);
+                    $qty = $validated['quantity'] ?? 1;
+                    $subtotal = $activity->price * $qty;
+                    $itemName = "{$activity->name} ({$qty} Pax)";
+
+                    // Activity Add-ons
+                    if (!empty($validated['selected_addons'])) {
+                        $availableAddons = collect($activity->addons ?? []);
+                        foreach ($validated['selected_addons'] as $addonName) {
+                            $addon = $availableAddons->firstWhere('name', $addonName);
+                            if ($addon) $subtotal += ($addon['price'] ?? 0);
+                        }
+                    }
+                    break;
+
+                case 'holiday_package':
+                    $pkg = HolidayPackage::findOrFail($validated['id']);
+                    $pax = ($validated['adults'] ?? 1) + ($validated['children'] ?? 0);
+                    // Use model helper for tiered pricing if available, else base price
+                    $pricePerPax = method_exists($pkg, 'getPricePerPax') ? $pkg->getPricePerPax($pax) : $pkg->price;
+                    if (!$pricePerPax) throw new \Exception("Pricing unavailable for this pax count");
+
+                    $subtotal = $pricePerPax * $pax;
+                    $itemName = "{$pkg->name} ({$pax} Pax)";
+
+                    // Package Add-ons
+                    if (!empty($validated['selected_addons'])) {
+                        $availableAddons = collect($pkg->addons ?? []);
+                        foreach ($validated['selected_addons'] as $addonName) {
+                            $addon = $availableAddons->firstWhere('name', $addonName);
+                            if ($addon) $subtotal += ($addon['price'] ?? 0);
+                        }
+                    }
+                    break;
+
+                case 'open_trip':
+                    $trip = OpenTrip::findOrFail($validated['id']);
+                    $pax = ($validated['adults'] ?? 1) + ($validated['children'] ?? 0);
+                    $subtotal = $trip->starting_from_price * $pax;
+                    $itemName = "{$trip->name} ({$pax} Pax)";
+
+                    // Open Trip Add-ons
+                    if (!empty($validated['selected_addons'])) {
+                        $availableAddons = collect($trip->addons ?? []);
+                        foreach ($validated['selected_addons'] as $addonName) {
+                            $addon = $availableAddons->firstWhere('name', $addonName);
+                            if ($addon) $subtotal += ($addon['price'] ?? 0);
+                        }
+                    }
+                    break;
+
+                case 'trip_planner':
+                    $setting = Setting::where('key', 'trip_planner_price')->first();
+                    $subtotal = $setting ? (float)$setting->value : 0;
+                    $itemName = "Trip Planning Service";
+                    break;
+            }
+
+            // 2. Calculate Discount
+            $discountAmount = 0;
+            $codeDetails = null;
+
+            if (!empty($validated['discount_code'])) {
+                $code = DiscountCode::where('code', $validated['discount_code'])->first();
+                if ($code && $code->isValid()) {
+                    $discountAmount = $code->calculateDiscount($subtotal);
+                    $codeDetails = [
+                        'code' => $code->code,
+                        'type' => $code->type,
+                        'value' => $code->value
+                    ];
+                } else {
+                    return response()->json(['message' => 'Invalid or expired discount code'], 422);
+                }
+            }
+
+            return response()->json([
+                'product' => $itemName,
+                'subtotal' => $subtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => max(0, $subtotal - $discountAmount),
+                'applied_code' => $codeDetails
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Calculation error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Store a newly created CAR RENTAL booking.
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
@@ -36,21 +161,20 @@ class BookingController extends Controller
             'phone_number'    => 'required|string|max:20',
             'pickup_location' => 'required|string|max:255',
             'pickup_time'     => 'required|date_format:H:i',
+            'discount_code'   => 'nullable|string|exists:discount_codes,code', // ✅ Added
+            // Add-ons for cars if you implement them later
+            'selected_addons' => 'nullable|array',
         ]);
 
         $startDate = Carbon::parse($validated['start_date']);
         $endDate = Carbon::parse($validated['end_date']);
         $user = Auth::user();
 
-        // 1. Basic Status Check (Global)
         if ($carRental->status !== 'available') {
             return response()->json(['message' => 'This car is not available for booking.'], 422);
         }
 
-        // 2. ✅ FIXED AVAILABILITY CHECK
-        // Instead of requiring 'available' rows (which fails if "today" hasn't been seeded),
-        // we simply check if there are any CONFLICTS (booked or maintenance).
-        // If no conflicts found, we assume it's free.
+        // Check Conflicts
         $conflictingDates = CarRentalAvailability::where('car_rental_id', $carRental->id)
             ->whereBetween('date', [$startDate, $endDate])
             ->whereIn('status', ['booked', 'maintenance'])
@@ -66,32 +190,77 @@ class BookingController extends Controller
             DB::beginTransaction();
 
             $pricePerDay = $carRental->price_per_day;
-            $totalPrice = $pricePerDay * $requestedDays;
+            $baseSubtotal = $pricePerDay * $requestedDays;
+
+            // ✅ Calculate Add-ons (If car has add-ons)
+            $addonsTotal = 0;
+            $selectedAddonsDetails = [];
+            if (!empty($validated['selected_addons']) && !empty($carRental->addons)) {
+                $availableAddons = collect($carRental->addons);
+                foreach ($validated['selected_addons'] as $addonName) {
+                    $addon = $availableAddons->firstWhere('name', $addonName);
+                    if ($addon) {
+                        $price = (float)($addon['price'] ?? 0);
+                        $addonsTotal += $price;
+                        $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
+                    }
+                }
+            }
+
+            $grossSubtotal = $baseSubtotal + $addonsTotal;
+
+            // ✅ Apply Discount
+            $discountAmount = 0;
+            $discountCodeId = null;
+            $discountCode = null;
+
+            if (!empty($validated['discount_code'])) {
+                $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+                if ($discountCode && $discountCode->isValid()) {
+                    $discountAmount = $discountCode->calculateDiscount($grossSubtotal);
+                    $discountCodeId = $discountCode->id;
+                }
+            }
+
+            $totalPrice = max(0, $grossSubtotal - $discountAmount);
             $downPayment = $totalPrice * 0.5;
             $paymentDeadline = Carbon::now()->addHours(2);
 
-            $order = new Order([
+            // Create Order
+            $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-CAR-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $totalPrice,
-                'discount_amount' => 0,
+                'subtotal' => $grossSubtotal,
+                'discount_amount' => $discountAmount,
                 'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
                 'status' => 'pending',
                 'payment_deadline' => $paymentDeadline,
                 'down_payment_amount' => $downPayment,
             ]);
-            $order->save();
 
-            $orderItem = new OrderItem([
+            // Create Order Items
+            OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $carRental->id,
                 'orderable_type' => CarRental::class,
                 'name' => $carRental->brand . ' ' . $carRental->car_model,
                 'quantity' => $requestedDays,
-                'price' => $pricePerDay,
+                'price' => $baseSubtotal, // Price for car rental only
             ]);
-            $orderItem->save();
 
+            foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $carRental->id,
+                    'orderable_type' => CarRental::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
+
+            // Create Booking
             $booking = new Booking([
                 'user_id' => $user->id,
                 'status' => 'pending',
@@ -109,6 +278,8 @@ class BookingController extends Controller
                     'phone_number'    => $validated['phone_number'],
                     'pickup_location' => $validated['pickup_location'],
                     'pickup_time'     => $validated['pickup_time'],
+                    'selected_addons' => $selectedAddonsDetails,
+                    'discount_applied' => $discountAmount
                 ]
             ]);
             $carRental->bookings()->save($booking);
@@ -116,21 +287,17 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            // 3. ✅ FIXED AVAILABILITY UPDATE
-            // Iterate through each day and create/update the record to 'booked'.
-            // This ensures if the row didn't exist before, it is created now.
-            $period = CarbonPeriod::create($startDate, $endDate);
+            // Increment Discount Usage
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
 
+            // Update Availability
+            $period = CarbonPeriod::create($startDate, $endDate);
             foreach ($period as $date) {
                 CarRentalAvailability::updateOrCreate(
-                    [
-                        'car_rental_id' => $carRental->id,
-                        'date' => $date->toDateString()
-                    ],
-                    [
-                        'status' => 'booked',
-                        'price' => $carRental->price_per_day // Persist price
-                    ]
+                    ['car_rental_id' => $carRental->id, 'date' => $date->toDateString()],
+                    ['status' => 'booked', 'price' => $carRental->price_per_day]
                 );
             }
 
@@ -149,36 +316,450 @@ class BookingController extends Controller
         }
     }
 
-    public function index()
+    /**
+     * Store ACTIVITY Booking
+     */
+    public function storeActivityBooking(Request $request, Activity $activity)
     {
-        $bookings = Booking::with(['bookable', 'order'])
-            ->where('user_id', Auth::id())
-            ->latest()
-            ->get();
-        return response()->json($bookings);
-    }
-
-    public function show(Booking $booking)
-    {
-        if ($booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        $booking->load('bookable', 'order.transaction');
-        return response()->json($booking);
-    }
-
-    public function update(Request $request, Booking $booking)
-    {
-        if ($booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
         $validated = $request->validate([
-            'status' => 'sometimes|in:pending,confirmed,cancelled',
+            'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'activity_time' => 'required|string',
+            'quantity' => 'required|integer|min:1',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255',
+            'special_request' => 'nullable|string',
+            'selected_addons' => 'nullable|array',
+            'selected_addons.*' => 'string',
+            'discount_code' => 'nullable|string|exists:discount_codes,code', // ✅ Added
         ]);
-        $booking->update($validated);
-        return response()->json($booking);
+
+        if ($activity->status !== 'active') {
+            return response()->json(['message' => 'Activity not available.'], 400);
+        }
+
+        $user = Auth::user();
+        $totalPax = $validated['quantity'];
+        $pricePerPax = $activity->price;
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        // ✅ Calculate Add-ons
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($activity->addons)) {
+            $availableAddons = collect($activity->addons);
+            foreach ($validated['selected_addons'] as $addonName) {
+                $addon = $availableAddons->firstWhere('name', $addonName);
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
+                }
+            }
+        }
+
+        $grossSubtotal = $baseSubtotal + $addonsTotal;
+
+        // ✅ Apply Discount
+        $discountAmount = 0;
+        $discountCodeId = null;
+        $discountCode = null;
+
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+            if ($discountCode && $discountCode->isValid()) {
+                $discountAmount = $discountCode->calculateDiscount($grossSubtotal);
+                $discountCodeId = $discountCode->id;
+            }
+        }
+
+        $totalPrice = max(0, $grossSubtotal - $discountAmount);
+        $downPayment = $totalPrice * 0.5;
+        $paymentDeadline = Carbon::now()->addHours(2);
+
+        try {
+            DB::beginTransaction();
+
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
+                'subtotal' => $grossSubtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
+            ]);
+
+            // Item 1: Main Activity
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $activity->id,
+                'orderable_type' => Activity::class,
+                'name' => $activity->name,
+                'quantity' => $validated['quantity'],
+                'price' => $baseSubtotal, // Price of activity only
+            ]);
+
+             // Item 2+: Add-ons
+             foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $activity->id,
+                    'orderable_type' => Activity::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
+
+            $booking = $activity->bookings()->create([
+                'user_id' => $user->id,
+                'status' => 'pending',
+                'payment_status' => 'unpaid',
+                'total_price' => $totalPrice,
+                'booking_date' => $validated['booking_date'],
+                'start_date' => $validated['booking_date'],
+                'details' => [
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+                    'quantity' => $validated['quantity'],
+                    'activity_time' => $validated['activity_time'],
+                    'pickup_location' => $validated['pickup_location'],
+                    'special_request' => $validated['special_request'] ?? null,
+                    'service_name' => $activity->name,
+                    'price_per_person' => $pricePerPax,
+                    'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails,
+                    'discount_applied' => $discountAmount
+                ],
+            ]);
+
+            $order->booking_id = $booking->id;
+            $order->save();
+
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Activity booked successfully.',
+                'payment_deadline' => $paymentDeadline->toIso8601String(),
+                'order' => $order->load('orderItems.orderable', 'booking.bookable'),
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Activity booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Booking failed.'], 500);
+        }
     }
 
+    /**
+     * Store HOLIDAY PACKAGE Booking
+     */
+    public function storeHolidayPackageBooking(Request $request, $packageId)
+    {
+        $validated = $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'adults' => 'required|integer|min:1',
+            'children' => 'sometimes|integer|min:0',
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255',
+            'flight_number' => 'nullable|string|max:50',
+            'special_request' => 'nullable|string',
+            'selected_addons' => 'nullable|array',
+            'selected_addons.*' => 'string',
+        ]);
+
+        $user = Auth::user();
+        $package = HolidayPackage::findOrFail($packageId);
+
+        $adultsCount = $validated['adults'];
+        $childrenCount = $validated['children'] ?? 0;
+        $totalPax = $adultsCount + $childrenCount;
+
+        $pricePerPax = $package->getPricePerPax($totalPax);
+        if ($pricePerPax === null) {
+            return response()->json(['message' => 'Pricing unavailable for this number of pax.'], 400);
+        }
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($package->addons)) {
+            $availableAddons = collect($package->addons);
+            foreach ($validated['selected_addons'] as $addonName) {
+                $addon = $availableAddons->firstWhere('name', $addonName);
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
+                }
+            }
+        }
+
+        $grossSubtotal = $baseSubtotal + $addonsTotal;
+
+        $discountAmount = 0;
+        $discountCodeId = null;
+        $discountCode = null;
+
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+            if (!$discountCode || !$discountCode->isValid()) {
+                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
+            }
+            $discountAmount = $discountCode->calculateDiscount($grossSubtotal);
+            $discountCodeId = $discountCode->id;
+        }
+
+        $totalPrice = max(0, $grossSubtotal - $discountAmount);
+        $downPayment = $totalPrice * 0.5;
+        $paymentDeadline = now()->addHours(2);
+
+        DB::beginTransaction();
+        try {
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
+                'subtotal' => $grossSubtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
+            ]);
+
+            $booking = $package->bookings()->create([
+                'user_id' => $user->id,
+                'booking_date' => $validated['start_date'],
+                'start_date' => $validated['start_date'],
+                'end_date' => Carbon::parse($validated['start_date'])->addDays($package->duration - 1)->toDateString(),
+                'status' => 'pending',
+                'total_price' => $totalPrice,
+                'payment_status' => 'unpaid',
+                'details' => [
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+                    'adults' => $adultsCount,
+                    'children' => $childrenCount,
+                    'total_pax' => $totalPax,
+                    'pickup_location' => $validated['pickup_location'],
+                    'flight_number' => $validated['flight_number'] ?? null,
+                    'special_request' => $validated['special_request'] ?? null,
+                    'service_name' => $package->name,
+                    'price_per_pax' => $pricePerPax,
+                    'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails,
+                    'discount_applied' => $discountAmount
+                ]
+            ]);
+
+            $order->booking_id = $booking->id;
+            $order->save();
+
+            // Order Items
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $package->id,
+                'orderable_type' => HolidayPackage::class,
+                'name' => $package->name . " ($totalPax Pax)",
+                'quantity' => 1,
+                'price' => $baseSubtotal,
+            ]);
+
+            foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $package->id,
+                    'orderable_type' => HolidayPackage::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
+
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
+
+            DB::commit();
+            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Holiday package booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create booking. ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Store OPEN TRIP Booking
+     */
+    public function storeOpenTripBooking(Request $request, $openTripId)
+    {
+        $validated = $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'adults' => 'required|integer|min:1',
+            'children' => 'sometimes|integer|min:0',
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
+            'participant_nationality' => 'required|string|max:100',
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone_number' => 'required|string|max:20',
+            'pickup_location' => 'required|string|max:255',
+            'special_request' => 'nullable|string',
+            'selected_addons' => 'nullable|array',
+            'selected_addons.*' => 'string',
+        ]);
+
+        $user = Auth::user();
+        $trip = OpenTrip::findOrFail($openTripId);
+
+        $adultsCount = $validated['adults'];
+        $childrenCount = $validated['children'] ?? 0;
+        $totalPax = $adultsCount + $childrenCount;
+
+        $pricePerPax = $trip->starting_from_price;
+        if (!$pricePerPax || $pricePerPax <= 0) {
+             return response()->json(['message' => 'Price info missing.'], 400);
+        }
+        $baseSubtotal = $pricePerPax * $totalPax;
+
+        $addonsTotal = 0;
+        $selectedAddonsDetails = [];
+
+        if (!empty($validated['selected_addons']) && !empty($trip->addons)) {
+            $availableAddons = collect($trip->addons);
+            foreach ($validated['selected_addons'] as $addonName) {
+                $addon = $availableAddons->firstWhere('name', $addonName);
+                if ($addon) {
+                    $price = (float) ($addon['price'] ?? 0);
+                    $addonsTotal += $price;
+                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
+                }
+            }
+        }
+
+        $grossSubtotal = $baseSubtotal + $addonsTotal;
+
+        $discountAmount = 0;
+        $discountCodeId = null;
+        $discountCode = null;
+
+        if (!empty($validated['discount_code'])) {
+            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
+            if (!$discountCode || !$discountCode->isValid()) {
+                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
+            }
+            $discountAmount = $discountCode->calculateDiscount($grossSubtotal);
+            $discountCodeId = $discountCode->id;
+        }
+
+        $totalPrice = max(0, $grossSubtotal - $discountAmount);
+        $downPayment = $totalPrice * 0.5;
+        $paymentDeadline = now()->addHours(2);
+
+        DB::beginTransaction();
+        try {
+            $order = Order::create([
+                'user_id' => $user->id,
+                'order_number' => 'ORD-OT-' . strtoupper(Str::random(6)) . time(),
+                'subtotal' => $grossSubtotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $totalPrice,
+                'discount_code_id' => $discountCodeId,
+                'status' => 'pending',
+                'payment_deadline' => $paymentDeadline,
+                'down_payment_amount' => $downPayment,
+            ]);
+
+            $booking = $trip->bookings()->create([
+                'user_id' => $user->id,
+                'booking_date' => $validated['start_date'],
+                'start_date' => $validated['start_date'],
+                'end_date' => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(),
+                'status' => 'pending',
+                'total_price' => $totalPrice,
+                'payment_status' => 'unpaid',
+                'details' => [
+                    'full_name' => $validated['full_name'],
+                    'email' => $validated['email'],
+                    'phone_number' => $validated['phone_number'],
+                    'participant_nationality' => $validated['participant_nationality'],
+                    'adults' => $adultsCount,
+                    'children' => $childrenCount,
+                    'total_pax' => $totalPax,
+                    'pickup_location' => $validated['pickup_location'],
+                    'special_request' => $validated['special_request'] ?? null,
+                    'service_name' => $trip->name,
+                    'price_per_pax' => $pricePerPax,
+                    'base_subtotal' => $baseSubtotal,
+                    'addons_total' => $addonsTotal,
+                    'selected_addons' => $selectedAddonsDetails,
+                    'discount_applied' => $discountAmount
+                ]
+            ]);
+
+            $order->booking_id = $booking->id;
+            $order->save();
+
+            // Order Items
+            OrderItem::create([
+                'order_id' => $order->id,
+                'orderable_id' => $trip->id,
+                'orderable_type' => OpenTrip::class,
+                'name' => $trip->name . " ($totalPax Pax)",
+                'quantity' => 1,
+                'price' => $baseSubtotal,
+            ]);
+
+            foreach ($selectedAddonsDetails as $addon) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'orderable_id' => $trip->id,
+                    'orderable_type' => OpenTrip::class,
+                    'name' => 'Add-on: ' . $addon['name'],
+                    'quantity' => 1,
+                    'price' => $addon['price'],
+                ]);
+            }
+
+            if ($discountCode) {
+                $discountCode->increment('uses');
+            }
+
+            DB::commit();
+            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Open Trip booking failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create booking.'], 500);
+        }
+    }
+
+    /**
+     * Store TRIP PLANNER Booking
+     */
     public function storeTripPlannerBooking(Request $request)
     {
         $validated = $request->validate([
@@ -211,8 +792,8 @@ class BookingController extends Controller
             $discountCodeId = $discountCode->id;
         }
 
-        $totalPrice = $subtotal - $discountAmount;
-        $downPayment = $subtotal * 0.5;
+        $totalPrice = max(0, $subtotal - $discountAmount);
+        $downPayment = $totalPrice * 0.5;
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
@@ -277,432 +858,33 @@ class BookingController extends Controller
         }
     }
 
-    public function storeHolidayPackageBooking(Request $request, $packageId)
+    public function index()
     {
-        $validated = $request->validate([
-            'start_date' => 'required|date|after_or_equal:today',
-            'adults' => 'required|integer|min:1',
-            'children' => 'sometimes|integer|min:0',
-            'discount_code' => 'nullable|string|exists:discount_codes,code',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
-            'pickup_location' => 'required|string|max:255',
-            'flight_number' => 'nullable|string|max:50',
-            'special_request' => 'nullable|string',
-
-            // ✅ Add-ons Validation
-            'selected_addons' => 'nullable|array',
-            'selected_addons.*' => 'string',
-        ]);
-
-        $user = Auth::user();
-        $package = HolidayPackage::findOrFail($packageId);
-
-        $adultsCount = $validated['adults'];
-        $childrenCount = $validated['children'] ?? 0;
-        $totalPax = $adultsCount + $childrenCount;
-
-        $pricePerPax = $package->getPricePerPax($totalPax);
-        if ($pricePerPax === null) {
-            return response()->json(['message' => 'Pricing unavailable for this number of pax.'], 400);
-        }
-        $baseSubtotal = $pricePerPax * $totalPax;
-
-        // ✅ Calculate Add-ons
-        $addonsTotal = 0;
-        $selectedAddonsDetails = [];
-
-        if (!empty($validated['selected_addons']) && !empty($package->addons)) {
-            $availableAddons = collect($package->addons);
-
-            foreach ($validated['selected_addons'] as $addonName) {
-                // Find the addon in the package's stored addons
-                $addon = $availableAddons->firstWhere('name', $addonName);
-
-                if ($addon) {
-                    $price = (float) ($addon['price'] ?? 0);
-                    $addonsTotal += $price;
-                    $selectedAddonsDetails[] = [
-                        'name' => $addonName,
-                        'price' => $price
-                    ];
-                }
-            }
-        }
-
-        $discountAmount = 0;
-        $discountCodeId = null;
-        $discountCode = null;
-
-        if (!empty($validated['discount_code'])) {
-            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
-            if (!$discountCode || !$discountCode->isValid()) {
-                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
-            }
-            $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
-            $discountCodeId = $discountCode->id;
-        }
-
-        $finalSubtotal = $baseSubtotal + $addonsTotal;
-        $totalPrice = $finalSubtotal - $discountAmount;
-        $downPayment = $totalPrice * 0.5;
-        $paymentDeadline = now()->addHours(2);
-
-        DB::beginTransaction();
-        try {
-            $order = Order::create([
-                'user_id' => $user->id,
-                'order_number' => 'ORD-PKG-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $finalSubtotal,
-                'discount_amount' => $discountAmount,
-                'total_amount' => $totalPrice,
-                'discount_code_id' => $discountCodeId,
-                'status' => 'pending',
-                'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,
-            ]);
-
-            $booking = $package->bookings()->create([
-                'user_id' => $user->id,
-                'booking_date' => $validated['start_date'],
-                'start_date' => $validated['start_date'],
-                'end_date' => Carbon::parse($validated['start_date'])->addDays($package->duration - 1)->toDateString(),
-                'status' => 'pending',
-                'total_price' => $totalPrice,
-                'payment_status' => 'unpaid',
-                'details' => [
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
-                    'adults' => $adultsCount,
-                    'children' => $childrenCount,
-                    'total_pax' => $totalPax,
-                    'pickup_location' => $validated['pickup_location'],
-                    'flight_number' => $validated['flight_number'] ?? null,
-                    'special_request' => $validated['special_request'] ?? null,
-
-                    // Financial Snapshot
-                    'service_name' => $package->name,
-                    'price_per_pax' => $pricePerPax,
-                    'base_subtotal' => $baseSubtotal,
-                    'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Save details in Booking
-                    'discount_applied' => $discountAmount
-                ]
-            ]);
-
-            $order->booking_id = $booking->id;
-            $order->save();
-
-            // C. Create Order Items
-
-            // Item 1: The Main Package
-            OrderItem::create([
-                'order_id' => $order->id,
-                'orderable_id' => $package->id,
-                'orderable_type' => HolidayPackage::class,
-                'name' => $package->name . " ($totalPax Pax)",
-                'quantity' => 1,
-                'price' => $baseSubtotal,
-            ]);
-
-            // ✅ Items 2+: The Add-ons
-            foreach ($selectedAddonsDetails as $addon) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'orderable_id' => $package->id,
-                    'orderable_type' => HolidayPackage::class,
-                    'name' => 'Add-on: ' . $addon['name'],
-                    'quantity' => 1,
-                    'price' => $addon['price'],
-                ]);
-            }
-
-            if ($discountCode) {
-                $discountCode->increment('uses');
-            }
-
-            DB::commit();
-            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Holiday package booking failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to create booking. ' . $e->getMessage()], 500);
-        }
+        $bookings = Booking::with(['bookable', 'order'])
+            ->where('user_id', Auth::id())
+            ->latest()
+            ->get();
+        return response()->json($bookings);
     }
 
-    public function storeActivityBooking(Request $request, Activity $activity)
+    public function show(Booking $booking)
     {
-        $validated = $request->validate([
-            'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
-            'activity_time' => 'required|string',
-            'quantity' => 'required|integer|min:1',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
-            'pickup_location' => 'required|string|max:255',
-            'special_request' => 'nullable|string',
-            // ✅ Add-ons Validation
-            'selected_addons' => 'nullable|array',
-            'selected_addons.*' => 'string',
-        ]);
-
-        if ($activity->status !== 'active') {
-            return response()->json(['message' => 'Activity not available.'], 400);
+        if ($booking->user_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
-
-        $user = Auth::user();
-        $totalPax = $validated['quantity'];
-        $pricePerPax = $activity->price;
-        $baseSubtotal = $pricePerPax * $totalPax;
-
-        // ✅ Calculate Add-ons
-        $addonsTotal = 0;
-        $selectedAddonsDetails = [];
-
-        if (!empty($validated['selected_addons']) && !empty($activity->addons)) {
-            $availableAddons = collect($activity->addons);
-            foreach ($validated['selected_addons'] as $addonName) {
-                $addon = $availableAddons->firstWhere('name', $addonName);
-                if ($addon) {
-                    $price = (float) ($addon['price'] ?? 0);
-                    $addonsTotal += $price;
-                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
-                }
-            }
-        }
-
-        $finalSubtotal = $baseSubtotal + $addonsTotal;
-        $totalPrice = $finalSubtotal;
-        $downPayment = $totalPrice * 0.5;
-        $paymentDeadline = Carbon::now()->addHours(2);
-
-        try {
-            DB::beginTransaction();
-
-            $order = Order::create([
-                'user_id' => $user->id,
-                'order_number' => 'ORD-ACT-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $finalSubtotal,
-                'discount_amount' => 0,
-                'total_amount' => $totalPrice,
-                'status' => 'pending',
-                'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,
-            ]);
-
-            // Item 1: Main Activity
-            OrderItem::create([
-                'order_id' => $order->id,
-                'orderable_id' => $activity->id,
-                'orderable_type' => Activity::class,
-                'name' => $activity->name,
-                'quantity' => $validated['quantity'],
-                'price' => $pricePerPax,
-            ]);
-
-             // ✅ Items 2+: Add-ons
-             foreach ($selectedAddonsDetails as $addon) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'orderable_id' => $activity->id,
-                    'orderable_type' => Activity::class,
-                    'name' => 'Add-on: ' . $addon['name'],
-                    'quantity' => 1,
-                    'price' => $addon['price'],
-                ]);
-            }
-
-            $booking = $activity->bookings()->create([
-                'user_id' => $user->id,
-                'status' => 'pending',
-                'payment_status' => 'unpaid',
-                'total_price' => $totalPrice,
-                'booking_date' => $validated['booking_date'],
-                'start_date' => $validated['booking_date'],
-                'details' => [
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
-                    'quantity' => $validated['quantity'],
-                    'activity_time' => $validated['activity_time'],
-                    'pickup_location' => $validated['pickup_location'],
-                    'special_request' => $validated['special_request'] ?? null,
-                    'service_name' => $activity->name,
-                    'price_per_person' => $pricePerPax,
-                    'base_subtotal' => $baseSubtotal,
-                    'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Saved
-                ],
-            ]);
-
-            $order->booking_id = $booking->id;
-            $order->save();
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Activity booked successfully.',
-                'payment_deadline' => $paymentDeadline->toIso8601String(),
-                'order' => $order->load('orderItems.orderable', 'booking.bookable'),
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Activity booking failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Booking failed.'], 500);
-        }
+        $booking->load('bookable', 'order.transaction');
+        return response()->json($booking);
     }
 
-    public function storeOpenTripBooking(Request $request, $openTripId)
+    public function update(Request $request, Booking $booking)
     {
+        if ($booking->user_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
         $validated = $request->validate([
-            'start_date' => 'required|date|after_or_equal:today',
-            'adults' => 'required|integer|min:1',
-            'children' => 'sometimes|integer|min:0',
-            'discount_code' => 'nullable|string|exists:discount_codes,code',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
-            'pickup_location' => 'required|string|max:255',
-            'special_request' => 'nullable|string',
-            // ✅ Add-ons Validation
-            'selected_addons' => 'nullable|array',
-            'selected_addons.*' => 'string',
+            'status' => 'sometimes|in:pending,confirmed,cancelled',
         ]);
-
-        $user = Auth::user();
-        $trip = OpenTrip::findOrFail($openTripId);
-
-        $adultsCount = $validated['adults'];
-        $childrenCount = $validated['children'] ?? 0;
-        $totalPax = $adultsCount + $childrenCount;
-
-        $pricePerPax = $trip->starting_from_price;
-        if (!$pricePerPax || $pricePerPax <= 0) {
-             return response()->json(['message' => 'Price info missing.'], 400);
-        }
-        $baseSubtotal = $pricePerPax * $totalPax;
-
-        // ✅ Calculate Add-ons
-        $addonsTotal = 0;
-        $selectedAddonsDetails = [];
-
-        if (!empty($validated['selected_addons']) && !empty($trip->addons)) {
-            $availableAddons = collect($trip->addons);
-            foreach ($validated['selected_addons'] as $addonName) {
-                $addon = $availableAddons->firstWhere('name', $addonName);
-                if ($addon) {
-                    $price = (float) ($addon['price'] ?? 0);
-                    $addonsTotal += $price;
-                    $selectedAddonsDetails[] = ['name' => $addonName, 'price' => $price];
-                }
-            }
-        }
-
-        // ✅ Totals
-        $finalSubtotal = $baseSubtotal + $addonsTotal;
-
-        $discountAmount = 0;
-        $discountCodeId = null;
-        $discountCode = null;
-
-        if (!empty($validated['discount_code'])) {
-            $discountCode = DiscountCode::where('code', $validated['discount_code'])->first();
-            if (!$discountCode || !$discountCode->isValid()) {
-                throw ValidationException::withMessages(['discount_code' => 'Invalid discount code.']);
-            }
-            $discountAmount = $discountCode->calculateDiscount($baseSubtotal);
-            $discountCodeId = $discountCode->id;
-        }
-
-        $totalPrice = $finalSubtotal - $discountAmount;
-        $downPayment = $totalPrice * 0.5;
-        $paymentDeadline = now()->addHours(2);
-
-        DB::beginTransaction();
-        try {
-            $order = Order::create([
-                'user_id' => $user->id,
-                'order_number' => 'ORD-OT-' . strtoupper(Str::random(6)) . time(),
-                'subtotal' => $finalSubtotal,
-                'discount_amount' => $discountAmount,
-                'total_amount' => $totalPrice,
-                'discount_code_id' => $discountCodeId,
-                'status' => 'pending',
-                'payment_deadline' => $paymentDeadline,
-                'down_payment_amount' => $downPayment,
-            ]);
-
-            $booking = $trip->bookings()->create([
-                'user_id' => $user->id,
-                'booking_date' => $validated['start_date'],
-                'start_date' => $validated['start_date'],
-                'end_date' => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(),
-                'status' => 'pending',
-                'total_price' => $totalPrice,
-                'payment_status' => 'unpaid',
-                'details' => [
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
-                    'adults' => $adultsCount,
-                    'children' => $childrenCount,
-                    'total_pax' => $totalPax,
-                    'pickup_location' => $validated['pickup_location'],
-                    'special_request' => $validated['special_request'] ?? null,
-                    'service_name' => $trip->name,
-                    'price_per_pax' => $pricePerPax,
-                    'base_subtotal' => $baseSubtotal,
-                    'addons_total' => $addonsTotal,
-                    'selected_addons' => $selectedAddonsDetails, // ✅ Stored
-                    'discount_applied' => $discountAmount
-                ]
-            ]);
-
-            $order->booking_id = $booking->id;
-            $order->save();
-
-            // Item 1: Main Trip
-            OrderItem::create([
-                'order_id' => $order->id,
-                'orderable_id' => $trip->id,
-                'orderable_type' => OpenTrip::class,
-                'name' => $trip->name . " ($totalPax Pax)",
-                'quantity' => 1,
-                'price' => $baseSubtotal,
-            ]);
-
-            // ✅ Items 2+: Add-ons
-            foreach ($selectedAddonsDetails as $addon) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'orderable_id' => $trip->id,
-                    'orderable_type' => OpenTrip::class,
-                    'name' => 'Add-on: ' . $addon['name'],
-                    'quantity' => 1,
-                    'price' => $addon['price'],
-                ]);
-            }
-
-            if ($discountCode) {
-                $discountCode->increment('uses');
-            }
-
-            DB::commit();
-            return response()->json($order->load('orderItems.orderable', 'booking.bookable'), 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Open Trip booking failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to create booking.'], 500);
-        }
+        $booking->update($validated);
+        return response()->json($booking);
     }
 }

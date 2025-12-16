@@ -68,7 +68,7 @@ Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 've
     ->middleware(['signed', 'throttle:6,1']); // 'signed' middleware is crucial for security
 
 Route::get('/public/planner-config', [PlannerController::class, 'getConfig']);
-
+Route::post('/booking/check-price', [BookingController::class, 'checkPrice']);
 Route::get('/public/galleries', [GalleryController::class, 'index']);
 /*
 
