@@ -65,8 +65,8 @@ class PaymentController extends Controller
             $transactionNote = 'down_payment';
             $isPartialPayment = true;
 
-            // Fallback if DP is invalid
-            if (empty($amountToCharge) || $amountToCharge <= 0) {
+            // ✅ CHANGED: If DP is invalid OR equals/exceeds total, switch to full payment
+            if (empty($amountToCharge) || $amountToCharge <= 0 || $amountToCharge >= $order->total_amount) {
                  $amountToCharge = $order->total_amount;
                  $paymentOption = 'full_payment';
                  $transactionNote = 'full_payment';
@@ -123,7 +123,6 @@ class PaymentController extends Controller
                         ];
                     }
 
-                    // ✅ FIXED: Add Negative Line Item for Discount
                     // Midtrans requires sum(item_details) == gross_amount.
                     // If we have a discount, we must subtract it from the item list.
                     if ($order->discount_amount > 0) {

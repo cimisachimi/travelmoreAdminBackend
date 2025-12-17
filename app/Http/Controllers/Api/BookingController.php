@@ -760,6 +760,9 @@ class BookingController extends Controller
     /**
      * Store TRIP PLANNER Booking
      */
+    /**
+     * Store TRIP PLANNER Booking
+     */
     public function storeTripPlannerBooking(Request $request)
     {
         $validated = $request->validate([
@@ -793,7 +796,10 @@ class BookingController extends Controller
         }
 
         $totalPrice = max(0, $subtotal - $discountAmount);
-        $downPayment = $totalPrice * 0.5;
+
+        // ✅ CHANGED: Require full payment immediately (100% of total)
+        $downPayment = $totalPrice;
+
         $paymentDeadline = Carbon::now()->addHours(2);
 
         try {
