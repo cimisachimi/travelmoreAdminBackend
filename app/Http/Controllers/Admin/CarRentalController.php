@@ -13,10 +13,7 @@ use Illuminate\Support\Facades\Storage;
 
 class CarRentalController extends Controller
 {
-    /**
-     * Display a paginated listing of the resource.
-     */
-    public function index(Request $request)
+public function index(Request $request)
     {
         $year = $request->query('year', Carbon::now()->format('Y'));
         $month = $request->query('month', Carbon::now()->format('m'));
@@ -55,22 +52,19 @@ class CarRentalController extends Controller
         $request->validate([
             'car_model' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
+            'category' => 'required|string|in:regular,exclusive', // New field validation
             'price_per_day' => 'required|numeric',
             'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'gallery.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
         ]);
 
-        // 1. Create the Car Rental
-        // This triggers CarRentalObserver::created(), which AUTOMATICALLY inserts availability.
-        $carRental = CarRental::create($request->only('car_model', 'brand', 'price_per_day'));
+        $carRental = CarRental::create($request->only('car_model', 'brand', 'category', 'price_per_day'));
 
-        // 2. Handle Thumbnail
         if ($request->hasFile('thumbnail')) {
             $path = $request->file('thumbnail')->store('images/thumbnails', 'public');
             $carRental->images()->create(['url' => $path, 'type' => 'thumbnail']);
         }
 
-        // 3. Handle Gallery
         if ($request->hasFile('gallery')) {
             foreach ($request->file('gallery') as $file) {
                 $path = $file->store('images/gallery', 'public');
@@ -78,24 +72,19 @@ class CarRentalController extends Controller
             }
         }
 
-        // ❌ REMOVED: The manual availability loop.
-        // The Observer already did this. Keeping it here caused the Duplicate Entry error.
-
         return redirect()->route('admin.rentals.index')->with('success', 'Car rental created successfully.');
     }
 
     public function update(Request $request, CarRental $carRental)
     {
         $validatedData = $request->validate([
-            // Non-translatable fields
             'brand' => 'required|string|max:255',
             'car_model' => 'required|string|max:255',
+            'category' => 'required|string|in:regular,exclusive', // New field validation
             'capacity' => 'nullable|integer|min:0',
             'trunk_size' => 'nullable|integer|min:0',
             'price_per_day' => 'required|numeric|min:0',
             'status' => 'required|string|in:available,unavailable,maintenance',
-
-            // Translatable fields validation
             'translations' => 'required|array',
             'translations.en' => 'required|array',
             'translations.*.description' => 'nullable|string',
@@ -105,10 +94,10 @@ class CarRentalController extends Controller
             'translations.*.features' => 'nullable|string',
         ]);
 
-        // Update main model
         $carRental->update($request->only([
             'brand',
             'car_model',
+            'category', // Include in update
             'capacity',
             'trunk_size',
             'price_per_day',
@@ -124,7 +113,6 @@ class CarRentalController extends Controller
         $carRental->features = !empty($englishTranslation['features']) ? array_map('trim', explode(',', $englishTranslation['features'])) : [];
         $carRental->save();
 
-        // Update translations table
         foreach ($validatedData['translations'] as $locale => $data) {
             $carRental->translations()->updateOrCreate(
                 ['locale' => $locale],
@@ -155,12 +143,8 @@ class CarRentalController extends Controller
         $statuses = $request->input('statuses', []);
 
         foreach ($statuses as $day => $newStatus) {
-            if (!ctype_digit((string)$day)) {
-                continue;
-            }
+            if (!ctype_digit((string)$day)) continue;
             $date = Carbon::createFromDate($year, $month, $day)->toDateString();
-
-            // Use updateOrCreate to handle existing records cleanly
             CarRentalAvailability::updateOrCreate(
                 ['car_rental_id' => $carRental->id, 'date' => $date],
                 ['status' => $newStatus]

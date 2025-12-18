@@ -13,6 +13,7 @@ class CarRental extends Model
         'car_model',
         'brand',
         'car_type',
+        'category', // Add this line
         'transmission',
         'fuel_type',
         'capacity',

@@ -7,19 +7,19 @@ import { Label } from "@/Components/ui/label";
 import { Textarea } from "@/Components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import InputError from "@/Components/InputError";
-import { ArrowLeft, Edit, Trash2, Upload, Car, Luggage, Users, Gauge, Fuel } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Upload, Car, Luggage, Users, Gauge, Fuel, Crown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/Components/ui/tabs";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/Components/ui/tooltip";
 import { format, getYear, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, getMonth, isSameMonth } from 'date-fns';
-import { router } from "@inertiajs/react"; // Global router for navigation/actions
-import React, { useState, useMemo, useEffect } from "react"; // Import useEffect
+import { router } from "@inertiajs/react";
+import React, { useState, useMemo, useEffect } from "react";
 import AvailabilityCalendar from "@/Components/AvailabilityCalendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/Components/ui/dialog";
 import { Badge } from "@/Components/ui/badge";
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
-// --- HELPER COMPONENTS (DEFINED EXTERNALLY) ---
+// --- HELPER COMPONENTS ---
 
 const YearlyCalendar = ({ availabilities }) => {
   const today = new Date();
@@ -106,6 +106,7 @@ const EditCarForm = ({ carRental }) => {
   const { data, setData, put, processing, errors } = useForm({
     brand: carRental.brand || '',
     car_model: carRental.car_model || '',
+    category: carRental.category || 'regular', // Added Category
     capacity: carRental.capacity || '',
     trunk_size: carRental.trunk_size || '',
     price_per_day: carRental.price_per_day || '',
@@ -128,13 +129,11 @@ const EditCarForm = ({ carRental }) => {
     }
   });
 
-  // ✅ FIXED: This useEffect hook listens for changes in the carRental prop.
-  // When the prop updates after a save, it forces the form's state to be
-  // re-initialized with the new data, ensuring the fields show the saved values.
   useEffect(() => {
     setData({
       brand: carRental.brand || '',
       car_model: carRental.car_model || '',
+      category: carRental.category || 'regular', // Added Category Sync
       capacity: carRental.capacity || '',
       trunk_size: carRental.trunk_size || '',
       price_per_day: carRental.price_per_day || '',
@@ -156,7 +155,7 @@ const EditCarForm = ({ carRental }) => {
         }
       }
     });
-  }, [carRental]); // The dependency array makes this effect run whenever carRental changes
+  }, [carRental]);
 
   const handleTranslationChange = (locale, field, value) => {
     setData('translations', {
@@ -182,12 +181,25 @@ const EditCarForm = ({ carRental }) => {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><Label htmlFor="brand">Brand</Label><Input id="brand" value={data.brand} onChange={e => setData('brand', e.target.value)} /></div>
           <div><Label htmlFor="car_model">Car Model</Label><Input id="car_model" value={data.car_model} onChange={e => setData('car_model', e.target.value)} /></div>
-          <div><Label htmlFor="capacity">Capacity (People)</Label><Input id="capacity" type="number" value={data.capacity} onChange={e => setData('capacity', e.target.value)} /></div>
-          <div><Label htmlFor="trunk_size">Trunk Size (Bags)</Label><Input id="trunk_size" type="number" value={data.trunk_size} onChange={e => setData('trunk_size', e.target.value)} /></div>
-          <div><Label htmlFor="price_per_day">Price Per Day (IDR)</Label><Input id="price_per_day" type="number" value={data.price_per_day} onChange={e => setData('price_per_day', e.target.value)} /></div>
+
+          {/* CATEGORY SELECT BUTTON */}
+          <div>
+            <Label htmlFor="category">Rental Category</Label>
+            <Select onValueChange={(value) => setData('category', value)} value={data.category}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="regular">Regular Rental</SelectItem>
+                <SelectItem value="exclusive">Exclusive Rental</SelectItem>
+              </SelectContent>
+            </Select>
+            <InputError message={errors.category} className="mt-2" />
+          </div>
+
           <div>
             <Label htmlFor="status">Status</Label>
-            <Select onValueChange={(value) => setData('status', value)} defaultValue={data.status}>
+            <Select onValueChange={(value) => setData('status', value)} value={data.status}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="available">Available</SelectItem>
@@ -196,6 +208,10 @@ const EditCarForm = ({ carRental }) => {
               </SelectContent>
             </Select>
           </div>
+
+          <div><Label htmlFor="capacity">Capacity (People)</Label><Input id="capacity" type="number" value={data.capacity} onChange={e => setData('capacity', e.target.value)} /></div>
+          <div><Label htmlFor="trunk_size">Trunk Size (Bags)</Label><Input id="trunk_size" type="number" value={data.trunk_size} onChange={e => setData('trunk_size', e.target.value)} /></div>
+          <div className="md:col-span-2"><Label htmlFor="price_per_day">Price Per Day (IDR)</Label><Input id="price_per_day" type="number" value={data.price_per_day} onChange={e => setData('price_per_day', e.target.value)} /></div>
         </CardContent>
       </Card>
       <Card>
@@ -305,7 +321,22 @@ export default function Show({ auth, carRental }) {
       header={
         <div className="flex items-center gap-4">
           <Link href={route('admin.rentals.index')}><Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
-          <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">{carRental.brand} {carRental.car_model}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+              {carRental.brand} {carRental.car_model}
+            </h2>
+            {/* CATEGORY INDICATOR */}
+            <Badge
+              variant={carRental.category === 'exclusive' ? 'default' : 'outline'}
+              className={carRental.category === 'exclusive' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200' : ''}
+            >
+              {carRental.category === 'exclusive' ? (
+                <><Crown className="w-3 h-3 mr-1" /> Exclusive</>
+              ) : (
+                <><Car className="w-3 h-3 mr-1" /> Regular</>
+              )}
+            </Badge>
+          </div>
         </div>
       }
     >

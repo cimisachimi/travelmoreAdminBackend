@@ -13,10 +13,13 @@ import {
 } from "@/Components/ui/dialog";
 import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
-import { Textarea } from "@/Components/ui/textarea"; // Added for description
+import { Textarea } from "@/Components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/Components/ui/select";
 import InputError from "@/Components/InputError";
 import AvailabilityCalendar from "@/Components/AvailabilityCalendar";
-import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { PlusCircle, Edit, Trash2, Crown, Car } from "lucide-react"; // Added Crown and Car icons
 import DangerButton from "@/Components/DangerButton";
 import { Badge } from "@/Components/ui/badge";
 
@@ -51,10 +54,10 @@ export default function Index({ auth, carRentals, filters }) {
   const [selectedCar, setSelectedCar] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date(filters.year, filters.month - 1));
 
-  // Updated useForm hook with new fields
   const { data, setData, post, processing, errors, reset } = useForm({
     car_model: "",
     brand: "",
+    category: "regular",
     car_type: "",
     transmission: "",
     fuel_type: "",
@@ -62,7 +65,7 @@ export default function Index({ auth, carRentals, filters }) {
     trunk_size: "",
     price_per_day: "",
     description: "",
-    features: "", // Handled as a comma-separated string
+    features: "",
     thumbnail: null,
     gallery: [],
   });
@@ -118,8 +121,20 @@ export default function Index({ auth, carRentals, filters }) {
                 <DialogTitle>Add a New Car Rental</DialogTitle>
               </DialogHeader>
               <form onSubmit={submitCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                {/* Column 1 */}
                 <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="category">Rental Category</Label>
+                    <Select onValueChange={(value) => setData("category", value)} defaultValue={data.category}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="regular">Regular Rental</SelectItem>
+                        <SelectItem value="exclusive">Exclusive Rental</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <InputError message={errors.category} className="mt-2" />
+                  </div>
                   <div>
                     <Label htmlFor="brand">Brand</Label>
                     <Input id="brand" value={data.brand} onChange={(e) => setData("brand", e.target.value)} />
@@ -136,14 +151,9 @@ export default function Index({ auth, carRentals, filters }) {
                     <InputError message={errors.car_type} className="mt-2" />
                   </div>
                   <div>
-                    <Label htmlFor="transmission">Transmission (e.g., Automatic)</Label>
+                    <Label htmlFor="transmission">Transmission</Label>
                     <Input id="transmission" value={data.transmission} onChange={(e) => setData("transmission", e.target.value)} />
                     <InputError message={errors.transmission} className="mt-2" />
-                  </div>
-                  <div>
-                    <Label htmlFor="fuel_type">Fuel Type (e.g., Gasoline)</Label>
-                    <Input id="fuel_type" value={data.fuel_type} onChange={(e) => setData("fuel_type", e.target.value)} />
-                    <InputError message={errors.fuel_type} className="mt-2" />
                   </div>
                   <div>
                     <Label htmlFor="price_per_day">Price Per Day (IDR)</Label>
@@ -151,15 +161,19 @@ export default function Index({ auth, carRentals, filters }) {
                     <InputError message={errors.price_per_day} className="mt-2" />
                   </div>
                 </div>
-                {/* Column 2 */}
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="capacity">Capacity (People)</Label>
+                    <Label htmlFor="fuel_type">Fuel Type</Label>
+                    <Input id="fuel_type" value={data.fuel_type} onChange={(e) => setData("fuel_type", e.target.value)} />
+                    <InputError message={errors.fuel_type} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="capacity">Capacity</Label>
                     <Input id="capacity" type="number" value={data.capacity} onChange={(e) => setData("capacity", e.target.value)} />
                     <InputError message={errors.capacity} className="mt-2" />
                   </div>
                   <div>
-                    <Label htmlFor="trunk_size">Trunk Size (Bags)</Label>
+                    <Label htmlFor="trunk_size">Trunk Size</Label>
                     <Input id="trunk_size" type="number" value={data.trunk_size} onChange={(e) => setData("trunk_size", e.target.value)} />
                     <InputError message={errors.trunk_size} className="mt-2" />
                   </div>
@@ -169,19 +183,19 @@ export default function Index({ auth, carRentals, filters }) {
                     <InputError message={errors.description} className="mt-2" />
                   </div>
                   <div>
-                    <Label htmlFor="features">Features (comma-separated)</Label>
-                    <Input id="features" placeholder="e.g., Cruise Control, GPS, Bluetooth" value={data.features} onChange={(e) => setData("features", e.target.value)} />
+                    <Label htmlFor="features">Features</Label>
+                    <Input id="features" placeholder="e.g., GPS, Bluetooth" value={data.features} onChange={(e) => setData("features", e.target.value)} />
                     <InputError message={errors.features} className="mt-2" />
                   </div>
-                  <div>
-                    <Label htmlFor="thumbnail">Thumbnail</Label>
-                    <Input id="thumbnail" type="file" onChange={(e) => setData("thumbnail", e.target.files[0])} />
-                    <InputError message={errors.thumbnail} className="mt-2" />
-                  </div>
-                  <div>
-                    <Label htmlFor="gallery">Gallery Images</Label>
-                    <Input id="gallery" type="file" multiple onChange={(e) => setData("gallery", e.target.files)} />
-                    <InputError message={errors.gallery} className="mt-2" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="thumbnail">Thumbnail</Label>
+                      <Input id="thumbnail" type="file" onChange={(e) => setData("thumbnail", e.target.files[0])} />
+                    </div>
+                    <div>
+                      <Label htmlFor="gallery">Gallery</Label>
+                      <Input id="gallery" type="file" multiple onChange={(e) => setData("gallery", e.target.files)} />
+                    </div>
                   </div>
                 </div>
                 <DialogFooter className="md:col-span-2">
@@ -191,7 +205,6 @@ export default function Index({ auth, carRentals, filters }) {
             </DialogContent>
           </Dialog>
 
-          {/* --- Availability Editor Dialog --- */}
           <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
             <DialogContent className="sm:max-w-xl">
               <DialogHeader>
@@ -207,7 +220,6 @@ export default function Index({ auth, carRentals, filters }) {
             </DialogContent>
           </Dialog>
 
-          {/* --- Delete Confirmation Dialog --- */}
           <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
             <DialogContent>
               <DialogHeader>
@@ -241,6 +253,7 @@ export default function Index({ auth, carRentals, filters }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Car</TableHead>
+                    <TableHead>Category</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Transmission</TableHead>
                     <TableHead>Capacity</TableHead>
@@ -249,39 +262,52 @@ export default function Index({ auth, carRentals, filters }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {carRentals.data.map((car) => (
-                    <TableRow key={car.id}>
+                  {carRentals.data.map((carItem) => (
+                    <TableRow key={carItem.id}>
                       <TableCell>
                         <div className="flex items-center gap-4">
                           <img
-                            src={`/storage/${car.images.find(img => img.type === 'thumbnail')?.url}`}
-                            alt={car.car_model}
+                            src={`/storage/${carItem.images.find(img => img.type === 'thumbnail')?.url}`}
+                            alt={carItem.car_model}
                             className="w-16 h-12 object-cover rounded-md"
                           />
                           <div>
-                            <p className="font-bold">{car.brand} {car.car_model}</p>
+                            <p className="font-bold">{carItem.brand} {carItem.car_model}</p>
                           </div>
                         </div>
                       </TableCell>
+                      {/* Noticeable Category Column */}
                       <TableCell>
-                        <Badge variant="outline">{car.car_type}</Badge>
+                        <Badge
+                          className={`capitalize flex items-center gap-1 w-fit ${
+                            carItem.category === 'exclusive'
+                              ? 'bg-amber-500 text-white hover:bg-amber-600 border-none shadow-sm'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200'
+                          }`}
+                        >
+                          {carItem.category === 'exclusive' ? <Crown className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                          {carItem.category}
+                        </Badge>
                       </TableCell>
-                      <TableCell>{car.transmission}</TableCell>
-                      <TableCell>{car.capacity} People</TableCell>
                       <TableCell>
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(car.price_per_day)}
+                        <Badge variant="outline">{carItem.car_type}</Badge>
+                      </TableCell>
+                      <TableCell>{carItem.transmission}</TableCell>
+                      <TableCell>{carItem.capacity} People</TableCell>
+                      <TableCell>
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(carItem.price_per_day)}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
-                        <Link href={route('admin.rentals.show', car.id)}>
+                        <Link href={route('admin.rentals.show', carItem.id)}>
                           <Button variant="outline">
                             View Details
                           </Button>
                         </Link>
-                        <Button variant="outline" onClick={() => openEditor(car)}>
+                        <Button variant="outline" onClick={() => openEditor(carItem)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Availability
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => openDeleteDialog(car)}>
+                        <Button variant="destructive" size="icon" onClick={() => openDeleteDialog(carItem)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
