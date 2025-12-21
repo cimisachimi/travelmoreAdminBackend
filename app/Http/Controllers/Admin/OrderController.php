@@ -7,6 +7,7 @@ use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
+use Carbon\Carbon; // ✅ Required for date calculations
 
 class OrderController extends Controller
 {
@@ -14,36 +15,74 @@ class OrderController extends Controller
      * Display a listing of the resource.
      */
     public function index(Request $request)
-    {
-        $query = Order::with(['user', 'orderItems', 'transaction']);
+{
+    // Start query with explicit selection to prevent column collisions after joins
+    $query = Order::with(['user', 'orderItems.orderable', 'transaction'])
+                  ->select('orders.*');
 
-        // --- 1. Sorting Logic ---
-        if ($request->has('sort') && $request->has('direction')) {
-            $sort = $request->input('sort');
-            $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
-
-            if ($sort === 'user.name') {
-                // Sort by related User name
-                $query->join('users', 'orders.user_id', '=', 'users.id')
-                      ->orderBy('users.name', $direction)
-                      ->select('orders.*'); // Avoid overwriting IDs
-            } else {
-                // Sort by direct Order columns
-                $query->orderBy($sort, $direction);
-            }
-        } else {
-            // Default sort: Date Descending
-            $query->latest();
-        }
-
-        $orders = $query->paginate(10)->withQueryString(); // Persist params in pagination links
-
-        return Inertia::render('Admin/Order/Index', [
-            'orders' => $orders,
-            // Pass current sort state back to frontend
-            'filters' => $request->only(['sort', 'direction']),
-        ]);
+    // --- 1. SEARCH LOGIC ---
+    if ($request->filled('search')) {
+        $search = $request->input('search');
+        $query->where(function ($q) use ($search) {
+            $q->where('orders.order_number', 'like', "%{$search}%")
+                ->orWhereHas('user', function ($qu) use ($search) {
+                    $qu->where('name', 'like', "%{$search}%")
+                       ->orWhere('email', 'like', "%{$search}%");
+                });
+        });
     }
+
+    // --- 2. SERVICE FILTER LOGIC ---
+    if ($request->filled('service') && $request->service !== 'all') {
+        $service = $request->input('service');
+        $query->whereHas('orderItems', function ($q) use ($service) {
+            $q->where('orderable_type', 'like', "%{$service}%");
+        });
+    }
+
+    // --- 3. DATE FILTER LOGIC (FIXED AMBIGUITY) ---
+    if ($request->filled('date_filter') && $request->date_filter !== 'all') {
+        $dateFilter = $request->input('date_filter');
+
+        if ($dateFilter === 'today') {
+            // ✅ Specify orders table
+            $query->whereDate('orders.created_at', \Carbon\Carbon::today());
+        } elseif ($dateFilter === 'last_week') {
+            // ✅ Specify orders table
+            $query->where('orders.created_at', '>=', \Carbon\Carbon::now()->subDays(7));
+        } elseif ($dateFilter === 'this_month') {
+            // ✅ Specify orders table
+            $query->whereMonth('orders.created_at', \Carbon\Carbon::now()->month)
+                  ->whereYear('orders.created_at', \Carbon\Carbon::now()->year);
+        }
+    }
+
+    // --- 4. SORTING LOGIC ---
+    if ($request->has('sort') && $request->has('direction')) {
+        $sort = $request->input('sort');
+        $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
+
+        if ($sort === 'user.name') {
+            // This join causes the ambiguity if created_at isn't prefixed
+            $query->join('users', 'orders.user_id', '=', 'users.id')
+                  ->orderBy('users.name', $direction);
+        } elseif ($sort === 'created_at') {
+            $query->orderBy('orders.created_at', $direction);
+        } else {
+            $query->orderBy($sort, $direction);
+        }
+    } else {
+        // ✅ Default sort: Use explicit table name
+        $query->orderBy('orders.created_at', 'desc');
+    }
+
+    $orders = $query->paginate(10)->withQueryString();
+
+    return Inertia::render('Admin/Order/Index', [
+        'orders' => $orders,
+        'filters' => $request->only(['sort', 'direction', 'search', 'service', 'date_filter']),
+    ]);
+}
 
     /**
      * Show the specified order.

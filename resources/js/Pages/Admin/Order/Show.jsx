@@ -253,42 +253,169 @@ const TripPlannerDetails = ({ details }) => {
     );
 };
 
-const CarRentalDetails = ({ details }) => {
-    const displayAddons = formatAddons(getVal(details, 'addons', 'selected_addons'));
+const OpenTripDetails = ({ details }) => {
+    // Priority fix: show only what was actually purchased during checkout
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* 1. Guest & Contact Details */}
             <div>
-                <SectionHeader icon={Car} title="Car Details" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Model" value={`${details.brand} ${details.car_model}`} icon={Car} />
-                    <DetailItem label="Duration" value={`${details.total_days} Days`} icon={Clock} />
+                <SectionHeader icon={User} title="Lead Guest Information" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Full Name" value={details.full_name} icon={User} />
+                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
+                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
                 </div>
             </div>
+
+            {/* 2. Group Composition */}
             <div>
-                <SectionHeader icon={MapPin} title="Logistics" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Pickup" value={details.pickup_location} icon={MapPin} className="col-span-2" />
-                    {displayAddons && <DetailItem label="Add-ons" value={displayAddons} icon={PlusCircle} className="col-span-2" />}
+                <SectionHeader icon={Users} title="Group Size" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-8">
+                    <DetailItem label="Adults" value={details.adults} icon={User} />
+                    <DetailItem label="Children" value={details.children || "0"} icon={Baby} />
+                    <DetailItem label="Total Participants" value={`${details.total_pax} Pax`} icon={Users} />
                 </div>
             </div>
+
+            {/* 3. Travel Logistics */}
+            <div>
+                <SectionHeader icon={MapPin} title="Travel Logistics" />
+                <div className="grid grid-cols-1 gap-y-4 gap-x-8">
+                    <DetailItem label="Meeting/Pickup Point" value={details.pickup_location} icon={MapPin} className="col-span-2" />
+                </div>
+            </div>
+
+            {/* 4. Financial Snapshot at Booking */}
+            <div>
+                <SectionHeader icon={Wallet} title="Pricing Snapshot" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Price Per Pax" value={formatCurrency(details.price_per_pax)} icon={Tag} />
+                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
+                    {details.discount_applied > 0 && (
+                        <DetailItem
+                            label="Discount Applied"
+                            value={`-${formatCurrency(details.discount_applied)}`}
+                            className="text-red-600 font-bold"
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 5. Selected Extras */}
+            {displayAddons && (
+                <div>
+                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
+                    <DetailItem label="Add-ons" value={displayAddons} />
+                </div>
+            )}
         </div>
     );
 };
 
-const HolidayPackageDetails = ({ details }) => {
-    const displayAddons = formatAddons(getVal(details, 'addons', 'selected_addons'));
+const CarRentalDetails = ({ details }) => {
+    // ✅ FIX: Prioritize 'selected_addons' (purchased) over 'addons' (catalog)
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* 1. Vehicle Information */}
             <div>
-                <SectionHeader icon={Users} title="Guests" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Lead Guest" value={details.full_name} icon={User} />
-                    <DetailItem label="Email" value={details.email} icon={Mail} />
+                <SectionHeader icon={Car} title="Vehicle Details" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Brand & Model" value={`${details.brand} ${details.car_model}`} icon={Car} />
+                    <DetailItem label="Rental Duration" value={`${details.total_days} Days`} icon={Clock} />
                 </div>
             </div>
+
+            {/* 2. Pickup & Contact */}
+            <div>
+                <SectionHeader icon={MapPin} title="Logistics & Contact" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
+                    <DetailItem label="Pickup Time" value={details.pickup_time} icon={Clock} />
+                    <DetailItem label="Contact Number" value={details.phone_number} icon={Phone} />
+                </div>
+            </div>
+
+            {/* 3. Financial Snapshot */}
+            <div>
+                <SectionHeader icon={Wallet} title="Pricing Snapshot" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Price Per Day" value={formatCurrency(details.price_per_day)} icon={Tag} />
+                    {details.discount_applied > 0 && (
+                        <DetailItem
+                            label="Discount Applied"
+                            value={`-${formatCurrency(details.discount_applied)}`}
+                            className="text-red-600 font-bold"
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 4. Selected Extras */}
             {displayAddons && (
                 <div>
-                    <SectionHeader icon={PlusCircle} title="Extras" />
+                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
+                    <DetailItem label="Add-ons" value={displayAddons} />
+                </div>
+            )}
+        </div>
+    );
+};
+const HolidayPackageDetails = ({ details }) => {
+const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+    return (
+        <div className="space-y-8">
+            {/* 1. Guest & Contact Details */}
+            <div>
+                <SectionHeader icon={User} title="Guest Information" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Full Name (Lead)" value={details.full_name} icon={User} />
+                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
+                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
+                </div>
+            </div>
+
+            {/* 2. Group Composition */}
+            <div>
+                <SectionHeader icon={Users} title="Group Size & Composition" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-8">
+                    <DetailItem label="Adults" value={details.adults} icon={User} />
+                    <DetailItem label="Children" value={details.children || "0"} icon={Baby} />
+                    <DetailItem label="Total Participants" value={`${details.total_pax} Pax`} icon={Users} />
+                </div>
+            </div>
+
+            {/* 3. Travel & Logistics */}
+            <div>
+                <SectionHeader icon={Plane} title="Logistics & Travel" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
+                    <DetailItem label="Flight Number" value={details.flight_number || "Not Provided"} icon={Plane} />
+                    <DetailItem label="Duration" value={`${details.duration} Days`} icon={Clock} />
+                </div>
+            </div>
+
+            {/* 4. Booking Snapshot (Financial Audit) */}
+            <div>
+                <SectionHeader icon={Wallet} title="Pricing Snapshot at Booking" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Price Per Pax" value={formatCurrency(details.price_per_pax)} icon={Tag} />
+                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
+                    {details.discount_applied > 0 && (
+                        <DetailItem label="Discount Applied" value={`-${formatCurrency(details.discount_applied)}`} className="text-red-600" />
+                    )}
+                </div>
+            </div>
+
+            {/* 5. Extras */}
+            {displayAddons && (
+                <div>
+                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
                     <DetailItem label="Add-ons" value={displayAddons} />
                 </div>
             )}
@@ -297,28 +424,72 @@ const HolidayPackageDetails = ({ details }) => {
 };
 
 const ActivityDetails = ({ details }) => {
-    const activityName = getVal(details, 'name') || getVal(details, 'activity_name');
-    const displayAddons = formatAddons(getVal(details, 'addons', 'selected_addons'));
+    const activityName = getVal(details, 'name') || getVal(details, 'activity_name') || getVal(details, 'service_name');
+
+    // ✅ FIX PRIORITY: Check 'selected_addons' first to show only what the user purchased
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* Activity Highlight */}
             {activityName && (
-                <div className="mb-4 p-3 bg-orange-50 border border-orange-100 rounded-md">
-                    <span className="text-xs text-orange-600 font-bold uppercase tracking-wider">Activity Selected</span>
-                    <div className="text-orange-900 font-semibold">{activityName}</div>
+                <div className="mb-6 p-4 bg-orange-50 border border-orange-100 rounded-lg shadow-sm">
+                    <span className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Activity Selected</span>
+                    <div className="text-orange-900 font-bold text-lg">{activityName}</div>
                 </div>
             )}
+
+            {/* 1. Guest Information */}
             <div>
-                <SectionHeader icon={Ticket} title="Booking Details" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Guest Name" value={getVal(details, 'full_name')} icon={User} />
-                    <DetailItem label="Participants" value={`${getVal(details, 'quantity')} Pax`} icon={Users} />
-                    <DetailItem label="Pickup Location" value={getVal(details, 'pickup_location')} icon={MapPin} className="col-span-2" />
-                    <DetailItem label="Contact Number" value={getVal(details, 'phone_number')} icon={Phone} />
-                    <DetailItem label="Email" value={getVal(details, 'email')} icon={Mail} />
-                    {displayAddons && <DetailItem label="Selected Add-ons" value={displayAddons} icon={PlusCircle} className="col-span-2" />}
+                <SectionHeader icon={User} title="Guest Information" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Full Name" value={details.full_name} icon={User} />
+                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
+                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
                 </div>
             </div>
+
+            {/* 2. Schedule & Logistics */}
+            <div>
+                <SectionHeader icon={Ticket} title="Booking Specifics" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Participants" value={`${details.quantity} Pax`} icon={Users} />
+                    <DetailItem label="Preferred Time" value={details.activity_time} icon={Clock} />
+                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
+                </div>
+            </div>
+
+            {/* 3. Pricing Snapshot (Audit Trail) */}
+            <div>
+                <SectionHeader icon={Wallet} title="Pricing Snapshot at Booking" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <DetailItem label="Price Per Person" value={formatCurrency(details.price_per_person)} icon={Tag} />
+                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
+                    {details.discount_applied > 0 && (
+                        <DetailItem
+                            label="Discount Applied"
+                            value={`-${formatCurrency(details.discount_applied)}`}
+                            className="text-red-600 font-bold"
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 4. Selected Extras */}
+            {displayAddons && (
+                <div>
+                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
+                    <DetailItem label="Add-ons" value={displayAddons} />
+                </div>
+            )}
+
+            {/* 5. Service Reference (From Model) */}
+            {details.notes && (
+                <div className="pt-4 border-t">
+                    <DetailItem label="Service Notes" value={details.notes} icon={AlertCircle} />
+                </div>
+            )}
         </div>
     );
 };
@@ -495,9 +666,11 @@ export default function Show({ auth, order }) {
                                     {bookableType.includes("CarRental") && <CarRentalDetails details={combinedDetails} />}
                                     {bookableType.includes("HolidayPackage") && <HolidayPackageDetails details={combinedDetails} />}
                                     {bookableType.includes("Activity") && <ActivityDetails details={combinedDetails} />}
+                                    {bookableType.includes("OpenTrip") && <OpenTripDetails details={combinedDetails} />}
 
-                                    {!bookableType.match(/(TripPlanner|CarRental|HolidayPackage|Activity)/) && (
-                                        <div className="text-center py-8 text-muted-foreground italic">No specific service details available.</div>
+
+                                    {!bookableType.match(/(TripPlanner|CarRental|HolidayPackage|Activity|OpenTrip)/) && (
+                                    <div className="text-center py-8 text-muted-foreground italic">No specific service details available.</div>
                                     )}
 
                                     {specialRequest && (

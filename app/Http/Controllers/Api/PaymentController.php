@@ -187,6 +187,14 @@ class PaymentController extends Controller
      */
     public function notificationHandler(Request $request)
     {
+        // Generate signature key to verify the request is authentic
+        $serverKey = config('midtrans.server_key');
+        $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
+
+        if ($hashed !== $request->signature_key) {
+            Log::error('Midtrans Webhook: Invalid Signature Key detected.');
+            return response()->json(['message' => 'Invalid Signature'], 403);
+        }
         Log::info('Midtrans notification received:', $request->all());
 
         try {
