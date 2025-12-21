@@ -5,7 +5,7 @@ import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/Components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table'; // ✅ Imported Table Components
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
 import {
     Users,
     CreditCard,
@@ -23,7 +23,13 @@ import {
     Clock,
     MapPin,
     Eye,
-    Receipt
+    Receipt,
+    Car,
+    Map,
+    Briefcase,
+    Ticket,
+    ChevronRight,
+    Calendar
 } from 'lucide-react';
 import {
     BarChart,
@@ -38,8 +44,22 @@ import {
     Cell,
     Legend
 } from 'recharts';
+import { useEffect } from 'react'; // Ensure this is imported
 
-export default function Dashboard({ auth, stats, charts, recent_orders, delivery_orders, active_planners, filters }) {
+export default function Dashboard({ auth, stats, charts, upcoming_schedule, recent_orders, delivery_orders, active_planners, filters }) {
+    // ✅ ADD THIS HOOK:
+    useEffect(() => {
+        // Refresh data every 30 seconds
+        const interval = setInterval(() => {
+            router.reload({
+                preserveScroll: true,
+                preserveState: true,
+                only: ['stats', 'upcoming_schedule', 'recent_orders', 'delivery_orders']
+            });
+        }, 30000); // 30000ms = 30 seconds
+
+        return () => clearInterval(interval); // Cleanup when admin leaves dashboard
+    }, []);
 
     const currentRange = filters?.range || 'month';
 
@@ -87,12 +107,14 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
     const safeOrders = recent_orders || [];
     const safeDeliveryOrders = delivery_orders || [];
     const safePlanners = active_planners || [];
+    const safeUpcoming = upcoming_schedule || [];
 
     // --- Badge Helpers ---
     const getOrderStatusBadge = (status) => {
         switch(status) {
-            case 'paid': return <Badge className="bg-emerald-600 hover:bg-emerald-700">Paid</Badge>;
-            case 'settlement': return <Badge className="bg-emerald-600 hover:bg-emerald-700">Settled</Badge>;
+            case 'paid': return <Badge className="bg-emerald-600 hover:bg-emerald-700 border-none">Paid</Badge>;
+            case 'settlement': return <Badge className="bg-emerald-600 hover:bg-emerald-700 border-none">Settled</Badge>;
+            case 'partially_paid': return <Badge className="bg-orange-500 hover:bg-orange-600 border-none">Partial</Badge>;
             case 'pending': return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">Pending</Badge>;
             case 'cancelled':
             case 'expire':
@@ -113,7 +135,23 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
         }
     };
 
-    // --- ✅ NEW: Advanced Table Component ---
+    const ServiceIcon = ({ type }) => {
+        const config = {
+            CarRental: { icon: Car, color: "text-blue-600 bg-blue-50" },
+            Activity: { icon: Ticket, color: "text-orange-600 bg-orange-50" },
+            HolidayPackage: { icon: Briefcase, color: "text-emerald-600 bg-emerald-50" },
+            OpenTrip: { icon: Map, color: "text-cyan-600 bg-cyan-50" },
+            TripPlanner: { icon: Clock, color: "text-purple-600 bg-purple-50" },
+        };
+        const item = config[type] || { icon: Calendar, color: "text-slate-600 bg-slate-50" };
+        const Icon = item.icon;
+        return (
+            <div className={`p-2 rounded-md ${item.color}`}>
+                <Icon className="w-4 h-4" />
+            </div>
+        );
+    };
+
     const OrderTable = ({ orders, emptyMessage }) => {
         if (orders.length === 0) {
             return (
@@ -140,12 +178,9 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                     <TableBody>
                         {orders.map((order) => (
                             <TableRow key={order.id} className="group hover:bg-slate-50/50">
-                                {/* Order ID */}
                                 <TableCell className="font-medium text-xs text-muted-foreground">
                                     #{order.order_number}
                                 </TableCell>
-
-                                {/* Customer */}
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold ring-2 ring-white">
@@ -157,8 +192,6 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                                         </div>
                                     </div>
                                 </TableCell>
-
-                                {/* Service & Payment */}
                                 <TableCell>
                                     <div className="flex flex-col gap-1">
                                         <span className="text-sm font-medium capitalize truncate max-w-[150px]">{order.service}</span>
@@ -167,18 +200,12 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                                         </span>
                                     </div>
                                 </TableCell>
-
-                                {/* Status */}
                                 <TableCell>
                                     {getOrderStatusBadge(order.status)}
                                 </TableCell>
-
-                                {/* Amount */}
                                 <TableCell className="text-right font-bold text-gray-900">
                                     {formatCurrency(order.amount)}
                                 </TableCell>
-
-                                {/* Action */}
                                 <TableCell>
                                     <Button variant="ghost" size="icon" asChild className="opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Link href={route('admin.orders.show', order.id)}>
@@ -199,9 +226,8 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
         <AuthenticatedLayout user={auth.user} header="Overview">
             <Head title="Dashboard" />
 
-            <div className="py-6 space-y-6">
+            <div className="py-6 space-y-6 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
 
-                {/* HEADER & FILTERS */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h2 className="text-xl font-semibold leading-tight text-gray-800">Dashboard Stats</h2>
                     <div className="w-[180px]">
@@ -219,9 +245,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                     </div>
                 </div>
 
-                {/* 1. KEY METRICS ROW */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Revenue */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -233,7 +257,6 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                         </CardContent>
                     </Card>
 
-                    {/* Orders */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
@@ -245,19 +268,17 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                         </CardContent>
                     </Card>
 
-                    {/* Clients */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
-                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium">Upcoming Schedule</CardTitle>
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{safeStats.total_clients || 0}</div>
-                            <p className="text-xs text-muted-foreground">+{safeStats.new_clients || 0} new in period</p>
+                            <div className="text-2xl font-bold">{safeStats.upcoming_deliveries_count || 0}</div>
+                            <p className="text-xs text-muted-foreground">Confirmed services</p>
                         </CardContent>
                     </Card>
 
-                    {/* Action Items */}
                     <Link href={route('admin.orders.index')}>
                         <Card className="border-l-4 border-l-orange-500 hover:bg-slate-50 transition-colors cursor-pointer h-full">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -278,9 +299,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                     </Link>
                 </div>
 
-                {/* 2. CHARTS SECTION */}
                 <div className="grid gap-4 md:grid-cols-7">
-                    {/* Revenue Bar Chart */}
                     <Card className="col-span-4">
                         <CardHeader>
                             <CardTitle>Revenue Overview</CardTitle>
@@ -305,7 +324,6 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                         </CardContent>
                     </Card>
 
-                    {/* Category Pie Chart */}
                     <Card className="col-span-3">
                         <CardHeader>
                             <CardTitle>Sales by Category</CardTitle>
@@ -333,7 +351,76 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                     </Card>
                 </div>
 
-                {/* 3. ORDER & TRIP ACTIVITY SECTION (TABS) */}
+                <Card className="shadow-lg border-none overflow-hidden">
+                    <CardHeader className="bg-slate-900 text-white p-6">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <CardTitle className="text-xl font-black flex items-center gap-2">
+                                    <Clock className="w-6 h-6 text-cyan-400" />
+                                    SERVICE DELIVERY SCHEDULE
+                                </CardTitle>
+                                <CardDescription className="text-slate-400 font-medium">Confirmed logistics and upcoming fulfillments</CardDescription>
+                            </div>
+                            <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 uppercase tracking-widest px-3">
+                                {safeUpcoming.length} Tasks Scheduled
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader className="bg-slate-50">
+                                <TableRow>
+                                    <TableHead className="pl-6 py-4 font-black text-slate-500 uppercase text-[10px]">Date</TableHead>
+                                    <TableHead className="font-black text-slate-500 uppercase text-[10px]">Service / Product</TableHead>
+                                    <TableHead className="font-black text-slate-500 uppercase text-[10px]">Customer</TableHead>
+                                    <TableHead className="font-black text-slate-500 uppercase text-[10px]">Payment</TableHead>
+                                    <TableHead className="text-right pr-6 font-black text-slate-500 uppercase text-[10px]">Action</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {safeUpcoming.length > 0 ? (
+                                    safeUpcoming.map((item) => (
+                                        <TableRow key={item.id} className={`group hover:bg-slate-50 transition-colors ${item.is_today ? 'bg-rose-50/30' : ''}`}>
+                                            <TableCell className="pl-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <span className={`font-black text-sm ${item.is_today ? 'text-rose-600' : 'text-gray-900'}`}>
+                                                        {new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                    {item.is_today && (
+                                                        <span className="text-[9px] bg-rose-600 text-white w-fit px-1.5 py-0.5 rounded-sm font-black mt-0.5 animate-pulse uppercase">Execute Today</span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-3">
+                                                    <ServiceIcon type={item.service_type} />
+                                                    <div>
+                                                        <div className="font-bold text-gray-900 text-sm">{item.service_name}</div>
+                                                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">{item.service_type}</div>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="font-medium text-gray-700">{item.customer}</TableCell>
+                                            <TableCell>{getOrderStatusBadge(item.status)}</TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                <Link href={route('admin.orders.show', item.id)}>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 group-hover:bg-primary group-hover:text-white rounded-full">
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                </Link>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan="5" className="h-32 text-center text-muted-foreground italic font-medium">No upcoming deliveries found.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
                 <Tabs defaultValue="recent" className="w-full">
                     <div className="flex items-center justify-between mb-4">
                         <TabsList>
@@ -357,7 +444,6 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                         </div>
                     </div>
 
-                    {/* Tab: Recent Orders */}
                     <TabsContent value="recent">
                         <Card className="shadow-sm">
                             <CardHeader className="pb-3">
@@ -370,7 +456,6 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                         </Card>
                     </TabsContent>
 
-                    {/* Tab: Needs Delivery */}
                     <TabsContent value="delivery">
                         <Card className="border-orange-200 bg-orange-50/10 shadow-sm">
                             <CardHeader className="pb-3">
@@ -383,10 +468,9 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                             <CardContent className="p-0">
                                 <OrderTable orders={safeDeliveryOrders} emptyMessage="No orders currently need delivery. Good job!" />
                             </CardContent>
-                        </Card>
+                        </Card> {/* ✅ FIXED: Added this closing tag */}
                     </TabsContent>
 
-                    {/* Tab: Trip Planning */}
                     <TabsContent value="planning">
                         <Card className="border-blue-200 bg-blue-50/10 shadow-sm">
                             <CardHeader className="pb-3">
@@ -397,7 +481,7 @@ export default function Dashboard({ auth, stats, charts, recent_orders, delivery
                                 <CardDescription>Custom trip plans currently being worked on.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="space-y-4 px-6 pb-6">
+                                <div className="space-y-4 px-6 pb-6 pt-2">
                                     {safePlanners.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                                             <CheckCircle className="h-8 w-8 mb-2 opacity-50" />

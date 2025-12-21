@@ -21,13 +21,18 @@ import {
     ArrowLeft, User, Phone, Mail, MapPin, Clock, Calendar, Users,
     Car, Plane, Ticket, Briefcase, MessageSquare, Wallet, Compass,
     Building2, Flag, Baby, Luggage, CheckCircle2, XCircle, AlertCircle,
-    CreditCard, Package, PlusCircle, Tag
+    CreditCard, Package, PlusCircle, Tag, ChevronDown, ListChecks, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect } from "react";
 
-// --- HELPERS ---
+// ==========================================
+// --- 1. GLOBAL HELPERS ---
+// ==========================================
 
+/**
+ * Formats numbers into IDR currency format
+ */
 const formatCurrency = (amount) => {
     const numericAmount = Number(amount) || 0;
     return new Intl.NumberFormat("id-ID", {
@@ -37,6 +42,9 @@ const formatCurrency = (amount) => {
     }).format(numericAmount);
 };
 
+/**
+ * Standard date and time formatter
+ */
 const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleString("en-GB", {
@@ -45,6 +53,20 @@ const formatDate = (dateString) => {
     });
 };
 
+/**
+ * Formats the Travel Date specifically (Day Month Year)
+ */
+const formatTravelDate = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric'
+    });
+};
+
+/**
+ * Formats add-ons specifically to show what was purchased.
+ * Checks selected_addons first to match the order amount correctly.
+ */
 const formatAddons = (addons) => {
     if (!addons) return null;
     if (typeof addons === 'string') return addons;
@@ -63,27 +85,31 @@ const formatAddons = (addons) => {
     return null;
 };
 
-// ✅ UPDATED: Added explicit handling for 'partially_paid' style
+/**
+ * Returns a styled badge based on order transaction status
+ */
 const getStatusBadge = (status) => {
     const styles = {
         pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
         paid: "bg-green-100 text-green-800 border-green-200",
         settlement: "bg-green-100 text-green-800 border-green-200",
-        partially_paid: "bg-orange-100 text-orange-800 border-orange-200", // ✅ DISTINCT STYLE
+        partially_paid: "bg-orange-100 text-orange-800 border-orange-200",
         refund: "bg-blue-100 text-blue-800 border-blue-200",
         cancelled: "bg-red-100 text-red-800 border-red-200",
         expire: "bg-gray-100 text-gray-800 border-gray-200",
         failure: "bg-red-100 text-red-800 border-red-200",
     };
 
-    // Normalize status label
     let label = status;
     if (status === 'settlement') label = 'Paid';
     if (status === 'partially_paid') label = 'Partially Paid';
 
-    return <Badge variant="outline" className={`${styles[status] || "bg-gray-100"} capitalize px-2 py-0.5`}>{label}</Badge>;
+    return <Badge variant="outline" className={`${styles[status] || "bg-gray-100"} capitalize px-2.5 py-0.5`}>{label}</Badge>;
 };
 
+/**
+ * Safely retrieves values from nested data objects with multiple key fallbacks
+ */
 const getVal = (data, key, ...alts) => {
     const keys = [key, ...alts];
     for (const k of keys) {
@@ -94,9 +120,12 @@ const getVal = (data, key, ...alts) => {
     return null;
 };
 
-// --- LOGIC TO RESOLVE ITEM NAME ---
+/**
+ * FIXED: Matches order items to names with better fallback for Car Rentals
+ */
 const getOrderItemName = (item, details) => {
-    const addons = details?.addons || details?.selected_addons;
+    // 1. Check if it's an addon
+    const addons = details?.selected_addons || details?.addons;
     if (Array.isArray(addons)) {
         const matchedAddon = addons.find(a =>
             typeof a === 'object' &&
@@ -104,20 +133,66 @@ const getOrderItemName = (item, details) => {
         );
         if (matchedAddon) return { name: matchedAddon.name, isAddon: true };
     }
-    if (item.orderable && item.orderable.name) {
-        return { name: item.orderable.name, isAddon: false };
-    }
+
+    // 2. Check orderable relationship name
+    if (item.orderable && item.orderable.name) return { name: item.orderable.name, isAddon: false };
+
+    // 3. Check hardcoded name column in DB
     if (item.name) return { name: item.name, isAddon: false };
-    return { name: "Unknown Item", isAddon: false };
+
+    // 4. Fallback to Snapshot Data (Handles Car Rental brand + model)
+    const snapshotName = getVal(details, 'service_name', 'name', 'activity_name');
+    if (snapshotName) return { name: snapshotName, isAddon: false };
+
+    if (details?.brand && details?.car_model) {
+        return { name: `${details.brand} ${details.car_model}`, isAddon: false };
+    }
+
+    return { name: "Service Item", isAddon: false };
 };
 
+// ==========================================
+// --- 2. LAYOUT SUB-COMPONENTS ---
+// ==========================================
 
-// --- SUB-COMPONENTS ---
+const SectionHeader = ({ icon: Icon, title }) => (
+    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
+        <Icon className="w-4 h-4 text-primary" />
+        <h4 className="font-semibold text-sm text-foreground">{title}</h4>
+    </div>
+);
 
-// 1. Payment Parser
+const DetailItem = ({ label, value, icon: Icon, className = "" }) => {
+    if (!value) return null;
+    return (
+        <div className={`flex flex-col gap-1 ${className}`}>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
+                {Icon && <Icon className="w-3 h-3 text-muted-foreground/70" />} {label}
+            </span>
+            <span className="text-sm font-medium text-gray-900 break-words leading-snug">{value}</span>
+        </div>
+    );
+};
+
+const CatalogReference = ({ title, icon: Icon, children }) => (
+    <div className="mt-8 pt-6 border-t border-dashed">
+        <details className="group">
+            <summary className="flex items-center justify-between cursor-pointer list-none outline-none">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground group-hover:text-primary transition-colors">
+                    <Icon className="w-3.5 h-3.5" />
+                    {title}
+                </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground group-open:rotate-180 transition-transform" />
+            </summary>
+            <div className="mt-6 space-y-6 animate-in fade-in slide-in-from-top-2 overflow-hidden">
+                {children}
+            </div>
+        </details>
+    </div>
+);
+
 const PaymentMethodDetail = ({ transaction }) => {
     if (!transaction) return <span className="text-muted-foreground italic">No payment info</span>;
-
     let payload = {};
     try {
         payload = typeof transaction.payment_payloads === 'string'
@@ -126,52 +201,21 @@ const PaymentMethodDetail = ({ transaction }) => {
     } catch (e) { console.error("JSON Parse Error", e); }
 
     const type = transaction.payment_type;
-
     if (type === 'bank_transfer' && payload?.va_numbers?.[0]) {
         const va = payload.va_numbers[0];
         return (
             <div className="flex flex-col">
                 <span className="font-bold text-gray-800 uppercase">{va.bank} Virtual Account</span>
-                <div className="flex items-center gap-2 mt-1">
-                    <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded border">{va.va_number}</span>
-                </div>
-            </div>
-        );
-    }
-    if (type === 'echannel') {
-        return (
-            <div className="flex flex-col">
-                <span className="font-bold text-gray-800">Mandiri Bill Payment</span>
-                <span className="text-xs text-muted-foreground">Biller: {payload.biller_code}</span>
-                <span className="font-mono text-sm">Key: {payload.bill_key}</span>
-            </div>
-        );
-    }
-    if (['gopay', 'qris', 'shopeepay'].includes(type)) {
-        return (
-            <div className="flex flex-col">
-                <span className="font-bold text-gray-800 capitalize">{type.replace('_', ' ')}</span>
-                <span className="text-xs text-muted-foreground">Instant Payment</span>
-            </div>
-        );
-    }
-    if (type === 'credit_card') {
-        return (
-            <div className="flex flex-col">
-                <span className="font-bold text-gray-800">Credit Card</span>
-                <span className="text-xs text-muted-foreground uppercase">{payload.bank} - {payload.card_type}</span>
-                <span className="font-mono text-sm">**** **** **** {payload.masked_card}</span>
+                <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded border mt-1 w-fit">{va.va_number}</span>
             </div>
         );
     }
     return <span className="capitalize font-medium">{type?.replace(/_/g, ' ') || 'Unknown Method'}</span>;
 };
 
-// 2. Timeline
-const OrderTimeline = ({ order, effectiveStatus }) => { // ✅ Accept computed status
+const OrderTimeline = ({ order, effectiveStatus }) => {
     const steps = [
         { status: 'created', label: 'Order Created', date: order.created_at, active: true },
-        // If partially paid, we show it as "active" but distinct
         {
             status: 'paid',
             label: effectiveStatus === 'partially_paid' ? 'Down Payment Paid' : 'Payment Success',
@@ -201,300 +245,240 @@ const OrderTimeline = ({ order, effectiveStatus }) => { // ✅ Accept computed s
     );
 };
 
-// 3. Detail Helpers
-const SectionHeader = ({ icon: Icon, title }) => (
-    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-        <Icon className="w-4 h-4 text-primary" />
-        <h4 className="font-semibold text-sm text-foreground">{title}</h4>
-    </div>
-);
+// ==========================================
+// --- 3. SERVICE SPECIFIC RENDERERS ---
+// ==========================================
 
-const DetailItem = ({ label, value, icon: Icon, className = "" }) => {
-    if (!value) return null;
-    return (
-        <div className={`flex flex-col gap-1 ${className}`}>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
-                {Icon && <Icon className="w-3 h-3 text-muted-foreground/70" />} {label}
-            </span>
-            <span className="text-sm font-medium text-gray-900 break-words leading-snug">{value}</span>
-        </div>
-    );
-};
-
-// --- SERVICE RENDERERS ---
-const TripPlannerDetails = ({ details }) => {
-    const contactName = details.type === 'company' ? getVal(details, 'companyName', 'company_name') : getVal(details, 'fullName', 'full_name');
-    const displayAddons = formatAddons(getVal(details, 'addons', 'selected_addons'));
-
-    return (
-        <div className="space-y-6">
-            <div>
-                <SectionHeader icon={Compass} title="Trip Overview" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Destination" value={details.city} icon={MapPin} className="col-span-2" />
-                    <DetailItem label="Start Date" value={getVal(details, 'departureDate', 'departure_date')} icon={Calendar} />
-                    <DetailItem label="Duration" value={`${details.duration} Days`} icon={Clock} />
-                </div>
-            </div>
-            <div>
-                <SectionHeader icon={Flag} title="Preferences" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Add-ons" value={displayAddons || 'None'} icon={PlusCircle} className="col-span-2" />
-                </div>
-            </div>
-            <div>
-                <SectionHeader icon={User} title="Contact" />
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                    <DetailItem label="Name" value={contactName} icon={User} />
-                    <DetailItem label="Phone" value={getVal(details, 'phone', 'phone_number')} icon={Phone} />
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const OpenTripDetails = ({ details }) => {
-    // Priority fix: show only what was actually purchased during checkout
-    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
-
-    return (
-        <div className="space-y-8">
-            {/* 1. Guest & Contact Details */}
-            <div>
-                <SectionHeader icon={User} title="Lead Guest Information" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Full Name" value={details.full_name} icon={User} />
-                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
-                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
-                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
-                </div>
-            </div>
-
-            {/* 2. Group Composition */}
-            <div>
-                <SectionHeader icon={Users} title="Group Size" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-8">
-                    <DetailItem label="Adults" value={details.adults} icon={User} />
-                    <DetailItem label="Children" value={details.children || "0"} icon={Baby} />
-                    <DetailItem label="Total Participants" value={`${details.total_pax} Pax`} icon={Users} />
-                </div>
-            </div>
-
-            {/* 3. Travel Logistics */}
-            <div>
-                <SectionHeader icon={MapPin} title="Travel Logistics" />
-                <div className="grid grid-cols-1 gap-y-4 gap-x-8">
-                    <DetailItem label="Meeting/Pickup Point" value={details.pickup_location} icon={MapPin} className="col-span-2" />
-                </div>
-            </div>
-
-            {/* 4. Financial Snapshot at Booking */}
-            <div>
-                <SectionHeader icon={Wallet} title="Pricing Snapshot" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Price Per Pax" value={formatCurrency(details.price_per_pax)} icon={Tag} />
-                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
-                    {details.discount_applied > 0 && (
-                        <DetailItem
-                            label="Discount Applied"
-                            value={`-${formatCurrency(details.discount_applied)}`}
-                            className="text-red-600 font-bold"
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* 5. Selected Extras */}
-            {displayAddons && (
-                <div>
-                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
-                    <DetailItem label="Add-ons" value={displayAddons} />
-                </div>
-            )}
-        </div>
-    );
-};
-
-const CarRentalDetails = ({ details }) => {
-    // ✅ FIX: Prioritize 'selected_addons' (purchased) over 'addons' (catalog)
-    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
-
-    return (
-        <div className="space-y-8">
-            {/* 1. Vehicle Information */}
-            <div>
-                <SectionHeader icon={Car} title="Vehicle Details" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Brand & Model" value={`${details.brand} ${details.car_model}`} icon={Car} />
-                    <DetailItem label="Rental Duration" value={`${details.total_days} Days`} icon={Clock} />
-                </div>
-            </div>
-
-            {/* 2. Pickup & Contact */}
-            <div>
-                <SectionHeader icon={MapPin} title="Logistics & Contact" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
-                    <DetailItem label="Pickup Time" value={details.pickup_time} icon={Clock} />
-                    <DetailItem label="Contact Number" value={details.phone_number} icon={Phone} />
-                </div>
-            </div>
-
-            {/* 3. Financial Snapshot */}
-            <div>
-                <SectionHeader icon={Wallet} title="Pricing Snapshot" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Price Per Day" value={formatCurrency(details.price_per_day)} icon={Tag} />
-                    {details.discount_applied > 0 && (
-                        <DetailItem
-                            label="Discount Applied"
-                            value={`-${formatCurrency(details.discount_applied)}`}
-                            className="text-red-600 font-bold"
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* 4. Selected Extras */}
-            {displayAddons && (
-                <div>
-                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
-                    <DetailItem label="Add-ons" value={displayAddons} />
-                </div>
-            )}
-        </div>
-    );
-};
 const HolidayPackageDetails = ({ details }) => {
-const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
     return (
         <div className="space-y-8">
-            {/* 1. Guest & Contact Details */}
-            <div>
-                <SectionHeader icon={User} title="Guest Information" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Full Name (Lead)" value={details.full_name} icon={User} />
-                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
-                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
-                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
+            <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg shadow-sm">
+                <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Holiday Package Selected</span>
+                <div className="text-emerald-900 font-bold text-lg">{getVal(details, 'service_name', 'name')}</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                    <SectionHeader icon={User} title="Guest & Group Info" />
+                    <div className="grid grid-cols-2 gap-4">
+                        <DetailItem label="Lead Guest" value={details.full_name} icon={User} className="col-span-2" />
+                        <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                        <DetailItem label="Contact Number" value={details.phone_number} icon={Phone} />
+                        <DetailItem label="Adults" value={details.adults} icon={User} />
+                        <DetailItem label="Children" value={details.children || "0"} icon={Baby} />
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <SectionHeader icon={Calendar} title="Travel Schedule" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Trip Start Date" value={formatTravelDate(details.trip_start)} icon={Calendar} />
+                        <DetailItem label="Pickup Point" value={details.pickup_location} icon={MapPin} />
+                        <DetailItem label="Flight Num" value={details.flight_number || "Not Provided"} icon={Plane} />
+                        <DetailItem label="Duration" value={`${details.duration} Days`} icon={Clock} />
+                    </div>
                 </div>
             </div>
 
-            {/* 2. Group Composition */}
-            <div>
-                <SectionHeader icon={Users} title="Group Size & Composition" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-8">
-                    <DetailItem label="Adults" value={details.adults} icon={User} />
-                    <DetailItem label="Children" value={details.children || "0"} icon={Baby} />
-                    <DetailItem label="Total Participants" value={`${details.total_pax} Pax`} icon={Users} />
+            <CatalogReference title="View Package Itinerary & Specs" icon={Package}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                        <h5 className="font-bold text-sm border-b pb-1 flex items-center gap-2"><ListChecks className="w-3.5 h-3.5"/> Itinerary Highlights</h5>
+                        <div className="text-xs text-gray-600 leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: details.itinerary }} />
+                    </div>
+                    <div className="space-y-6">
+                        <div>
+                            <h5 className="font-bold text-sm text-green-700 border-b pb-1">What's Included</h5>
+                            <div className="text-xs text-gray-600 mt-2 prose prose-sm" dangerouslySetInnerHTML={{ __html: details.cost_includes }} />
+                        </div>
+                        <div>
+                            <h5 className="font-bold text-sm text-red-700 border-b pb-1">What's Excluded</h5>
+                            <div className="text-xs text-gray-600 mt-2 prose prose-sm" dangerouslySetInnerHTML={{ __html: details.cost_excludes }} />
+                        </div>
+                    </div>
                 </div>
-            </div>
-
-            {/* 3. Travel & Logistics */}
-            <div>
-                <SectionHeader icon={Plane} title="Logistics & Travel" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
-                    <DetailItem label="Flight Number" value={details.flight_number || "Not Provided"} icon={Plane} />
-                    <DetailItem label="Duration" value={`${details.duration} Days`} icon={Clock} />
-                </div>
-            </div>
-
-            {/* 4. Booking Snapshot (Financial Audit) */}
-            <div>
-                <SectionHeader icon={Wallet} title="Pricing Snapshot at Booking" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Price Per Pax" value={formatCurrency(details.price_per_pax)} icon={Tag} />
-                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
-                    {details.discount_applied > 0 && (
-                        <DetailItem label="Discount Applied" value={`-${formatCurrency(details.discount_applied)}`} className="text-red-600" />
-                    )}
-                </div>
-            </div>
-
-            {/* 5. Extras */}
-            {displayAddons && (
-                <div>
-                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
-                    <DetailItem label="Add-ons" value={displayAddons} />
-                </div>
-            )}
+            </CatalogReference>
         </div>
     );
 };
 
 const ActivityDetails = ({ details }) => {
-    const activityName = getVal(details, 'name') || getVal(details, 'activity_name') || getVal(details, 'service_name');
-
-    // ✅ FIX PRIORITY: Check 'selected_addons' first to show only what the user purchased
     const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
-
     return (
         <div className="space-y-8">
-            {/* Activity Highlight */}
-            {activityName && (
-                <div className="mb-6 p-4 bg-orange-50 border border-orange-100 rounded-lg shadow-sm">
-                    <span className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Activity Selected</span>
-                    <div className="text-orange-900 font-bold text-lg">{activityName}</div>
-                </div>
-            )}
+            <div className="p-4 bg-orange-50 border border-orange-100 rounded-lg shadow-sm">
+                <span className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Activity Selected</span>
+                <div className="text-orange-900 font-bold text-lg">{getVal(details, 'name', 'activity_name', 'service_name')}</div>
+            </div>
 
-            {/* 1. Guest Information */}
-            <div>
-                <SectionHeader icon={User} title="Guest Information" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Full Name" value={details.full_name} icon={User} />
-                    <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
-                    <DetailItem label="Email Address" value={details.email} icon={Mail} />
-                    <DetailItem label="Phone Number" value={details.phone_number} icon={Phone} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                    <SectionHeader icon={User} title="Participant Information" />
+                    <div className="grid grid-cols-2 gap-4">
+                        <DetailItem label="Lead Guest" value={details.full_name} icon={User} className="col-span-2" />
+                        <DetailItem label="Email" value={details.email} icon={Mail} className="col-span-2" />
+                        <DetailItem label="Quantity" value={`${details.quantity} Pax`} icon={Users} />
+                        <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <SectionHeader icon={Clock} title="Logistics & Pricing Audit" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Activity Date" value={formatTravelDate(details.booked_for)} icon={Calendar} />
+                        <DetailItem label="Preferred Time" value={details.activity_time} icon={Clock} />
+                        <DetailItem label="Pickup Point" value={details.pickup_location} icon={MapPin} />
+                        <DetailItem label="Price snapshot" value={`${formatCurrency(details.price_per_person)} / Pax`} icon={Tag} />
+                    </div>
                 </div>
             </div>
 
-            {/* 2. Schedule & Logistics */}
-            <div>
-                <SectionHeader icon={Ticket} title="Booking Specifics" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Participants" value={`${details.quantity} Pax`} icon={Users} />
-                    <DetailItem label="Preferred Time" value={details.activity_time} icon={Clock} />
-                    <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} className="col-span-2" />
-                </div>
-            </div>
-
-            {/* 3. Pricing Snapshot (Audit Trail) */}
-            <div>
-                <SectionHeader icon={Wallet} title="Pricing Snapshot at Booking" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-                    <DetailItem label="Price Per Person" value={formatCurrency(details.price_per_person)} icon={Tag} />
-                    <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Briefcase} />
-                    {details.discount_applied > 0 && (
-                        <DetailItem
-                            label="Discount Applied"
-                            value={`-${formatCurrency(details.discount_applied)}`}
-                            className="text-red-600 font-bold"
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* 4. Selected Extras */}
             {displayAddons && (
                 <div>
-                    <SectionHeader icon={PlusCircle} title="Selected Extras" />
+                    <SectionHeader icon={PlusCircle} title="Purchased Extras" />
                     <DetailItem label="Add-ons" value={displayAddons} />
                 </div>
             )}
 
-            {/* 5. Service Reference (From Model) */}
-            {details.notes && (
-                <div className="pt-4 border-t">
-                    <DetailItem label="Service Notes" value={details.notes} icon={AlertCircle} />
-                </div>
-            )}
+            <CatalogReference title="View Activity Description & Info" icon={Ticket}>
+                <div className="text-sm text-gray-600 leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: details.description }} />
+            </CatalogReference>
         </div>
     );
 };
 
-// --- MAIN COMPONENT ---
+const OpenTripDetails = ({ details }) => {
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+    return (
+        <div className="space-y-8">
+            <div className="p-4 bg-cyan-50 border border-cyan-100 rounded-lg shadow-sm">
+                <span className="text-[10px] text-cyan-600 font-bold uppercase tracking-wider">Open Trip Selected</span>
+                <div className="text-cyan-900 font-bold text-lg">{getVal(details, 'service_name', 'name')}</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                    <SectionHeader icon={Users} title="Fulfillment Data" />
+                    <div className="grid grid-cols-2 gap-4">
+                        <DetailItem label="Lead Guest" value={details.full_name} className="col-span-2" />
+                        <DetailItem label="Contact" value={details.phone_number} icon={Phone} />
+                        <DetailItem label="Nationality" value={details.participant_nationality} icon={Flag} />
+                        <DetailItem label="Group size" value={`${details.total_pax} Pax (${details.adults} Ad, ${details.children || 0} Ch)`} icon={Users} className="col-span-2" />
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <SectionHeader icon={Calendar} title="Travel Schedule" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Trip Date" value={formatTravelDate(details.trip_start)} icon={Calendar} />
+                        <DetailItem label="Meeting Point" value={details.pickup_location} icon={MapPin} />
+                        <DetailItem label="Price snapshot" value={`${formatCurrency(details.price_per_pax)} / Pax`} icon={Tag} />
+                        <DetailItem label="Base Subtotal" value={formatCurrency(details.base_subtotal)} icon={Wallet} />
+                    </div>
+                </div>
+            </div>
+
+            {displayAddons && (
+                <div>
+                    <SectionHeader icon={PlusCircle} title="Purchased Extras" />
+                    <DetailItem label="Add-ons" value={displayAddons} />
+                </div>
+            )}
+
+            <CatalogReference title="View Trip Details & Itinerary" icon={Compass}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                        <h5 className="font-bold text-sm border-b pb-1 flex items-center gap-2"><ListChecks className="w-3.5 h-3.5"/> Full Itinerary</h5>
+                        <div className="text-xs text-gray-600 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: details.itinerary }} />
+                    </div>
+                    <div className="space-y-4">
+                        <h5 className="font-bold text-sm border-b pb-1">Included Services</h5>
+                        <div className="text-xs text-gray-600 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: details.cost_includes }} />
+                    </div>
+                </div>
+            </CatalogReference>
+        </div>
+    );
+};
+
+const CarRentalDetails = ({ details }) => {
+    const displayAddons = formatAddons(getVal(details, 'selected_addons', 'addons'));
+    return (
+        <div className="space-y-8">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
+                <span className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Vehicle Selected</span>
+                <div className="text-slate-900 font-bold text-lg">{`${details.brand} ${details.car_model}`}</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                    <SectionHeader icon={Car} title="Vehicle Specs & Pickup" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Brand & Model" value={`${details.brand} ${details.car_model}`} icon={Car} />
+                        <DetailItem label="Duration" value={`${details.total_days} Days`} icon={Calendar} />
+                        <DetailItem label="Pickup Date" value={formatTravelDate(details.trip_start)} icon={Calendar} />
+                        <DetailItem label="Pickup Time" value={details.pickup_time} icon={Clock} />
+                        <DetailItem label="Pickup Location" value={details.pickup_location} icon={MapPin} />
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <SectionHeader icon={Wallet} title="Contact & Pricing Audit" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Contact Number" value={details.phone_number} icon={Phone} />
+                        <DetailItem label="Price Per Day" value={formatCurrency(details.price_per_day)} icon={Tag} />
+                        {details.discount_applied > 0 && (
+                            <DetailItem label="Discount Applied" value={`-${formatCurrency(details.discount_applied)}`} className="text-red-600 font-bold" />
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {displayAddons && (
+                <div>
+                    <SectionHeader icon={PlusCircle} title="Purchased Extras" />
+                    <DetailItem label="Add-ons" value={displayAddons} />
+                </div>
+            )}
+
+            <CatalogReference title="View Vehicle Specifications" icon={Car}>
+                <div className="text-sm text-gray-600 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: details.description }} />
+            </CatalogReference>
+        </div>
+    );
+};
+
+const TripPlannerDetails = ({ details }) => {
+    const contactName = details.type === 'company' ? getVal(details, 'companyName', 'company_name') : getVal(details, 'fullName', 'full_name');
+    return (
+        <div className="space-y-8">
+            <div className="mb-6 p-4 bg-purple-50 border border-purple-100 rounded-lg shadow-sm">
+                <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Custom Service</span>
+                <div className="text-purple-900 font-bold text-lg">Trip Planning Request</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <SectionHeader icon={Compass} title="Trip Overview" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Target Destination" value={details.city} icon={MapPin} />
+                        <DetailItem label="Departure Date" value={getVal(details, 'departureDate', 'departure_date')} icon={Calendar} />
+                        <DetailItem label="Desired Duration" value={`${details.duration} Days`} icon={Clock} />
+                    </div>
+                </div>
+                <div>
+                    <SectionHeader icon={User} title="Contact Details" />
+                    <div className="grid grid-cols-1 gap-4">
+                        <DetailItem label="Full Name" value={contactName} icon={User} />
+                        <DetailItem label="Phone Number" value={getVal(details, 'phone', 'phone_number')} icon={Phone} />
+                        <DetailItem label="Account Type" value={details.type} icon={Building2} className="capitalize" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ==========================================
+// --- 4. MAIN EXPORT COMPONENT ---
+// ==========================================
 
 export default function Show({ auth, order }) {
     const { flash } = usePage().props;
@@ -504,162 +488,145 @@ export default function Show({ auth, order }) {
         if (flash.error) toast.error(flash.error);
     }, [flash]);
 
-    const paidTransaction = order.transaction;
-    const isRefundable = paidTransaction && paidTransaction.status === "settlement";
     const booking = order.booking;
     const bookableType = booking?.bookable_type || "";
 
     const rawDetails = booking?.details || {};
     const bookable = booking?.bookable || {};
     const snapshotDetails = typeof rawDetails === 'string' ? JSON.parse(rawDetails) : rawDetails;
-    const combinedDetails = { ...bookable, ...snapshotDetails };
+
+    // Merge database columns into combinedDetails
+    const combinedDetails = {
+        ...bookable,
+        ...snapshotDetails,
+        trip_start: booking?.start_date || booking?.booking_date,
+        trip_end: booking?.end_date,
+        booked_for: booking?.booking_date
+    };
+
     const specialRequest = getVal(combinedDetails, 'special_request');
 
     const totalAmount = Number(order.total_amount) || 0;
     const transactionAmount = Number(order.transaction?.gross_amount) || 0;
-
     const isSettled = ['settlement', 'capture', 'paid'].includes(order.status) || order.transaction?.status === 'settlement';
 
-    // ✅ CRITICAL LOGIC: If settled amount < total amount, it IS a down payment/partial payment.
     const isDownPayment = isSettled && transactionAmount > 0 && transactionAmount < totalAmount;
-
-    const paidAmount = isSettled ? transactionAmount : 0;
-    const remainingBalance = totalAmount - paidAmount;
-
-    // ✅ FORCE STATUS OVERRIDE
-    // If it's a down payment, show "partially_paid" even if DB says "settlement"
     const displayStatus = isDownPayment ? 'partially_paid' : order.status;
 
+    const serviceConfig = {
+        TripPlanner: { title: "Trip Planning Fulfillment", icon: Compass },
+        CarRental: { title: "Car Rental Fulfillment", icon: Car },
+        HolidayPackage: { title: "Holiday Package Fulfillment", icon: Package },
+        Activity: { title: "Activity Fulfillment", icon: Ticket },
+        OpenTrip: { title: "Open Trip Fulfillment", icon: MapPin },
+    };
+    const currentType = Object.keys(serviceConfig).find(key => bookableType.includes(key));
+    const serviceInfo = serviceConfig[currentType] || { title: "Service Requirements", icon: Briefcase };
+    const ServiceTitleIcon = serviceInfo.icon;
+
     return (
-        <AuthenticatedLayout
-            user={auth.user}
-            header={
-                <div className="flex items-center gap-4">
-                    <Link href={route("admin.orders.index")}>
-                        <Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
-                    </Link>
-                    <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">Order #{order.order_number}</h2>
-                </div>
-            }
-        >
+        <AuthenticatedLayout user={auth.user} header={
+            <div className="flex items-center gap-4">
+                <Link href={route("admin.orders.index")}><Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+                <h2 className="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">Order Management</h2>
+            </div>
+        }>
             <Head title={`Order ${order.order_number}`} />
 
             <div className="py-12 max-w-7xl mx-auto sm:px-6 lg:px-8">
 
-                {/* 1. STATUS & TIMELINE CARD */}
-                <Card className="mb-8 border-l-4 border-l-primary shadow-sm bg-gradient-to-r from-white to-gray-50/50">
+                <Card className="mb-8 border-l-4 border-l-primary shadow-sm bg-gradient-to-r from-white to-gray-50/50 overflow-hidden">
                     <CardHeader className="pb-2">
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                             <div>
                                 <div className="flex items-center gap-3">
                                     <CardTitle className="text-2xl font-bold text-gray-900">Order #{order.order_number}</CardTitle>
 
-                                    {/* ✅ PAYMENT BADGE */}
-                                    {isDownPayment ? (
-                                        <Badge className="bg-orange-600 hover:bg-orange-700 text-white border-none text-xs px-2.5 py-0.5 shadow-sm">
-                                            Down Payment
-                                        </Badge>
+                                    {!isSettled ? (
+                                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 font-bold uppercase tracking-tight px-2.5 py-0.5">Unpaid</Badge>
+                                    ) : isDownPayment ? (
+                                        <Badge className="bg-orange-600 text-white shadow-sm px-2.5 py-0.5 border-none font-bold uppercase tracking-tight">Down Payment</Badge>
                                     ) : (
-                                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-200 text-xs px-2.5 py-0.5">
-                                            Full Payment
-                                        </Badge>
+                                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-200 font-black">Full Payment</Badge>
                                     )}
                                 </div>
-                                <CardDescription className="flex items-center gap-2 mt-1">
+                                <CardDescription className="flex items-center gap-2 mt-1 font-medium">
                                     <Calendar className="w-3.5 h-3.5" /> Placed on {formatDate(order.created_at)}
                                 </CardDescription>
                             </div>
                             <div className="flex flex-col items-end gap-1">
-                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Current Status</span>
-                                {/* ✅ DISPLAY COMPUTED STATUS */}
+                                <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Current Fulfillment Status</span>
                                 {getStatusBadge(displayStatus)}
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
-                        {/* ✅ PASS COMPUTED STATUS TO TIMELINE */}
                         <OrderTimeline order={order} effectiveStatus={displayStatus} />
                     </CardContent>
                 </Card>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* LEFT COLUMN: Main Info */}
+
                     <div className="lg:col-span-2 space-y-8">
 
-                        {/* 2. ITEMS ORDERED TABLE */}
-                        <Card>
-                            <CardHeader><CardTitle>Items Ordered</CardTitle></CardHeader>
+                        <Card className="shadow-sm border-border/60">
+                            <CardHeader className="border-b pb-3 bg-slate-50/30"><CardTitle className="text-lg">Items Purchased</CardTitle></CardHeader>
                             <CardContent className="p-0">
                                 <Table>
                                     <TableHeader>
-                                        <TableRow className="bg-muted/30">
-                                            <TableHead className="pl-6">Item Description</TableHead>
-                                            <TableHead className="text-center">Qty</TableHead>
-                                            <TableHead className="text-right pr-6">Price</TableHead>
+                                        <TableRow className="bg-muted/40">
+                                            <TableHead className="pl-6 font-bold uppercase text-[10px]">Description</TableHead>
+                                            <TableHead className="text-center font-bold uppercase text-[10px]">Qty</TableHead>
+                                            <TableHead className="text-right pr-6 font-bold uppercase text-[10px]">Price</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {order.order_items.map((item) => {
                                             const { name, isAddon } = getOrderItemName(item, combinedDetails);
-
                                             return (
-                                                <TableRow key={item.id}>
-                                                    <TableCell className="pl-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            {isAddon ? <PlusCircle className="w-4 h-4 text-orange-500" /> : <Ticket className="w-4 h-4 text-blue-500" />}
-                                                            <div className="font-semibold text-gray-900">{name}</div>
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground mt-0.5 capitalize ml-6">
-                                                            {isAddon ? 'Add-on' : item.orderable_type.split('\\').pop().replace(/([A-Z])/g, ' $1').trim()}
+                                                <TableRow key={item.id} className="hover:bg-transparent border-border/40">
+                                                    <TableCell className="pl-6 py-5">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`p-2 rounded-md ${isAddon ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                {isAddon ? <PlusCircle className="w-4 h-4" /> : <Ticket className="w-4 h-4" />}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-gray-900 leading-tight">{name}</div>
+                                                                <div className="text-[10px] text-muted-foreground mt-1 uppercase font-black tracking-tighter">
+                                                                    {isAddon ? 'Service Add-on' : item.orderable_type.split('\\').pop().replace(/([A-Z])/g, ' $1').trim()}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-center">{item.quantity}</TableCell>
-                                                    <TableCell className="text-right pr-6 font-medium">{formatCurrency(item.price)}</TableCell>
+                                                    <TableCell className="text-center font-bold text-gray-700">{item.quantity}</TableCell>
+                                                    <TableCell className="text-right pr-6 font-black text-gray-900">{formatCurrency(item.price)}</TableCell>
                                                 </TableRow>
                                             );
                                         })}
                                     </TableBody>
                                 </Table>
 
-                                {/* TOTALS */}
-                                <div className="p-6 bg-slate-50 border-t flex flex-col items-end gap-2">
-                                    <div className="w-full max-w-[280px] flex justify-between text-sm text-muted-foreground">
-                                        <span>Subtotal</span><span>{formatCurrency(order.subtotal)}</span>
+                                <div className="p-6 bg-slate-50/80 border-t flex flex-col items-end gap-3 text-sm border-border/50">
+                                    <div className="w-full max-w-[300px] flex justify-between text-muted-foreground font-medium">
+                                        <span>Items Subtotal</span><span>{formatCurrency(order.subtotal)}</span>
                                     </div>
-
-                                    {Number(order.discount_amount) > 0 && (
-                                        <div className="w-full max-w-[280px] flex justify-between text-sm text-muted-foreground">
-                                            <span>Discount</span><span className="text-red-500 font-medium">-{formatCurrency(order.discount_amount)}</span>
-                                        </div>
-                                    )}
-
-                                    {/* ✅ CONDITIONAL DOWN PAYMENT */}
+                                    {Number(order.discount_amount) > 0 && <div className="w-full max-w-[300px] flex justify-between text-red-600 font-bold"><span>Discount</span><span>-{formatCurrency(order.discount_amount)}</span></div>}
                                     {isDownPayment && (
                                         <>
-                                            <div className="w-full max-w-[280px] flex justify-between text-sm text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded">
-                                                <span>Down Payment (Paid)</span><span>{formatCurrency(paidAmount)}</span>
-                                            </div>
-                                            <div className="w-full max-w-[280px] flex justify-between text-sm text-orange-700 font-medium border-t border-orange-200 border-dashed pt-2 mt-1">
-                                                <span>Remaining Balance</span><span>{formatCurrency(remainingBalance)}</span>
-                                            </div>
+                                            <div className="w-full max-w-[300px] flex justify-between text-blue-700 font-black bg-blue-50/80 px-2 py-1 rounded-sm"><span>Paid (DP)</span><span>{formatCurrency(transactionAmount)}</span></div>
+                                            <div className="w-full max-w-[300px] flex justify-between text-orange-700 font-black border-t border-orange-200 border-dashed pt-2.5 mt-1"><span>Balance Due</span><span>{formatCurrency(order.total_amount - transactionAmount)}</span></div>
                                         </>
                                     )}
-
-                                    <div className="w-full max-w-[280px] flex justify-between text-lg font-bold border-t border-slate-200 pt-3 mt-1 text-slate-900">
-                                        <span>Total Amount</span><span>{formatCurrency(order.total_amount)}</span>
-                                    </div>
+                                    <div className="w-full max-w-[300px] flex justify-between text-xl font-black border-t border-slate-300 pt-4 mt-2 text-slate-900"><span>Final Total</span><span>{formatCurrency(order.total_amount)}</span></div>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        {/* 3. BOOKING SPECIFICS */}
                         {booking && (
-                            <Card className="overflow-hidden">
+                            <Card className="overflow-hidden shadow-sm border-border/60">
                                 <CardHeader className="bg-slate-50/50 border-b">
-                                    <CardTitle className="flex items-center gap-2 text-primary">
-                                        <Briefcase className="w-5 h-5" /> Service Information
-                                    </CardTitle>
-                                    <CardDescription>Detailed requirements for this booking.</CardDescription>
+                                    <CardTitle className="flex items-center gap-2 text-primary font-black uppercase text-sm tracking-wide"><ServiceTitleIcon className="w-5 h-5" /> {serviceInfo.title}</CardTitle>
+                                    <CardDescription className="text-xs">Fulfillment requirements defined at checkout.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="pt-6">
                                     {bookableType.includes("TripPlanner") && <TripPlannerDetails details={combinedDetails} />}
@@ -667,19 +634,9 @@ export default function Show({ auth, order }) {
                                     {bookableType.includes("HolidayPackage") && <HolidayPackageDetails details={combinedDetails} />}
                                     {bookableType.includes("Activity") && <ActivityDetails details={combinedDetails} />}
                                     {bookableType.includes("OpenTrip") && <OpenTripDetails details={combinedDetails} />}
-
-
-                                    {!bookableType.match(/(TripPlanner|CarRental|HolidayPackage|Activity|OpenTrip)/) && (
-                                    <div className="text-center py-8 text-muted-foreground italic">No specific service details available.</div>
-                                    )}
-
                                     {specialRequest && (
-                                        <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-lg flex gap-3 shadow-sm">
-                                            <MessageSquare className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"/>
-                                            <div>
-                                                <h5 className="text-amber-800 font-bold text-xs uppercase tracking-wide mb-1">Special Request</h5>
-                                                <p className="text-amber-900 text-sm italic leading-relaxed">"{specialRequest}"</p>
-                                            </div>
+                                        <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-lg flex gap-4 shadow-sm">
+                                            <MessageSquare className="w-6 h-6 text-amber-600 shrink-0 mt-0.5"/><div className="space-y-1"><h5 className="text-amber-800 font-black text-[10px] uppercase tracking-widest">Special Message</h5><p className="text-amber-900 text-sm italic font-medium">"{specialRequest}"</p></div>
                                         </div>
                                     )}
                                 </CardContent>
@@ -687,92 +644,35 @@ export default function Show({ auth, order }) {
                         )}
                     </div>
 
-                    {/* RIGHT COLUMN: Sidebar Info (Customer, Transaction, History) */}
                     <div className="space-y-6">
-                        {/* Customer */}
-                        <Card>
-                            <CardHeader className="pb-3 border-b"><CardTitle className="text-base">Customer Details</CardTitle></CardHeader>
-                            <CardContent className="pt-4">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                                        {order.user.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="overflow-hidden">
-                                        <div className="font-semibold text-gray-900 truncate">{order.user.name}</div>
-                                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <User className="w-3 h-3" /> Registered User
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-4">
-                                    <DetailItem label="Email Address" value={order.user.email} icon={Mail} />
-                                    <DetailItem label="Phone Number" value={order.user.phone_number || "Not Provided"} icon={Phone} />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Transaction */}
-                        <Card className="border-blue-100 shadow-sm overflow-hidden">
-                            <CardHeader className="bg-blue-50/80 border-b border-blue-100 pb-3">
-                                <CardTitle className="text-base text-blue-900 flex items-center gap-2">
-                                    <CreditCard className="w-4 h-4"/> Payment Information
-                                </CardTitle>
-                            </CardHeader>
+                        <Card className="shadow-sm border-border/60">
+                            <CardHeader className="pb-3 border-b bg-slate-50/30"><CardTitle className="text-base font-bold">Customer Profile</CardTitle></CardHeader>
                             <CardContent className="pt-5 space-y-5">
-                                {order.transaction ? (
-                                    <>
-                                        <div className="space-y-2">
-                                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Method</span>
-                                            <PaymentMethodDetail transaction={order.transaction} />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 pt-2">
-                                            <DetailItem label="Amount Paid" value={formatCurrency(order.transaction.gross_amount)} icon={Wallet} />
-                                            <DetailItem label="Payment Date" value={formatDate(order.transaction.updated_at)} icon={Clock} />
-                                        </div>
-                                        <div className="pt-3 border-t border-dashed">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-xs text-muted-foreground">Transaction ID</span>
-                                                {/* Display computed status here too if you like, otherwise use raw status */}
-                                                <Badge variant="outline" className="text-[10px] bg-white">{order.transaction.status}</Badge>
-                                            </div>
-                                            <span className="font-mono text-xs text-gray-600 break-all bg-gray-50 px-2 py-1 rounded block mt-1">
-                                                {order.transaction.transaction_code || order.transaction.id}
-                                            </span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="text-center py-8 text-muted-foreground text-sm border border-dashed rounded bg-slate-50">
-                                        No successful transaction found.
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-4 mb-2">
+                                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-xl border-2 border-primary/20">{order.user.name.charAt(0).toUpperCase()}</div>
+                                    <div className="overflow-hidden"><div className="font-black truncate text-gray-900 text-lg leading-none mb-1">{order.user.name}</div><div className="text-[10px] text-muted-foreground flex items-center gap-1 font-bold uppercase tracking-widest"><User className="w-3 h-3" /> Registered Booking Client</div></div>
+                                </div>
+                                <div className="space-y-4 pt-2">
+                                    <DetailItem label="Verified Email" value={order.user.email} icon={Mail} />
+                                    <DetailItem label="Phone / WhatsApp" value={order.user.phone_number || "Not Provided"} icon={Phone} />
+                                    <DetailItem label="Internal Account ID" value={`#USR-${order.user.id}`} icon={Info} />
+                                </div>
                             </CardContent>
                         </Card>
 
-                        {/* History */}
-                        {order.transactions && order.transactions.length > 1 && (
-                            <Card>
-                                <CardHeader className="pb-3 border-b"><CardTitle className="text-sm">Transaction History</CardTitle></CardHeader>
-                                <CardContent className="p-0">
-                                    <Table>
-                                        <TableBody>
-                                            {order.transactions.map(trx => (
-                                                <TableRow key={trx.id} className="hover:bg-transparent">
-                                                    <TableCell className="py-3 pl-4">
-                                                        <div className="font-medium text-xs">{formatDate(trx.created_at)}</div>
-                                                        <div className="text-[10px] text-muted-foreground capitalize">{trx.payment_type?.replace(/_/g, ' ')}</div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-3 pr-4">
-                                                        <Badge variant={trx.status === 'settlement' ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5">
-                                                            {trx.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        )}
+                        <Card className="border-blue-100 shadow-sm overflow-hidden border-2">
+                            <CardHeader className="bg-blue-50/80 border-b border-blue-100 pb-3"><CardTitle className="text-base text-blue-900 flex items-center gap-2 font-bold"><CreditCard className="w-4 h-4"/> Payment Transaction</CardTitle></CardHeader>
+                            <CardContent className="pt-6 space-y-6">
+                                {order.transaction ? <>
+                                    <div className="space-y-2"><span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Settlement Method</span><PaymentMethodDetail transaction={order.transaction} /></div>
+                                    <div className="grid grid-cols-2 gap-4 pt-1"><DetailItem label="Gross Received" value={formatCurrency(order.transaction.gross_amount)} icon={Wallet} /><DetailItem label="Payment Date" value={formatDate(order.transaction.updated_at)} icon={Clock} /></div>
+                                    <div className="pt-4 border-t border-dashed border-blue-200">
+                                        <div className="flex justify-between items-center mb-1.5"><span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Midtrans Reference</span><Badge variant="outline" className="text-[9px] bg-white h-4 font-black uppercase text-blue-700 border-blue-200">{order.transaction.status}</Badge></div>
+                                        <span className="font-mono text-[10px] text-gray-700 break-all bg-white/50 px-2.5 py-2 rounded-sm block border border-blue-100 shadow-inner">{order.transaction.transaction_code || order.transaction.id}</span>
+                                    </div>
+                                </> : <div className="text-center py-10 text-muted-foreground text-sm border border-dashed rounded-lg bg-slate-50/50 italic font-medium">No successful transaction detected.</div>}
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
             </div>

@@ -701,6 +701,8 @@ class BookingController extends Controller
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
+                    'start_date' => $validated['start_date'], // ✅ Add this
+                    'end_date'   => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(), // ✅ Add this
                     'full_name' => $validated['full_name'],
                     'email' => $validated['email'],
                     'phone_number' => $validated['phone_number'],

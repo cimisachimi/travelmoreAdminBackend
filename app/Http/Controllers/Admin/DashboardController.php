@@ -19,8 +19,9 @@ class DashboardController extends Controller
     public function __invoke(Request $request)
     {
         $range = $request->input('range', 'month');
+        $today = Carbon::today();
 
-        // [ ... Date Range Logic remains the same ... ]
+        // --- 0. DATE RANGE LOGIC ---
         switch ($range) {
             case 'today':
                 $startDate = Carbon::today();
@@ -53,7 +54,7 @@ class DashboardController extends Controller
                 break;
         }
 
-        // --- 1. KEY METRICS ---
+        // --- 1. KEY METRICS & GROWTH ---
         $totalRevenue = Transaction::where('status', 'settlement')
             ->where('created_at', '>=', $startDate)
             ->sum('gross_amount') ?? 0;
@@ -70,13 +71,19 @@ class DashboardController extends Controller
         }
 
         $totalOrders = Order::where('created_at', '>=', $startDate)->count();
-
         $totalClients = User::where('role', 'client')->count();
         $newClients = User::where('role', 'client')
             ->where('created_at', '>=', $startDate)
             ->count();
 
-        $needsDelivery = Order::whereIn('status', ['paid', 'partially_paid'])->count();
+        // New Metric: Total confirmed bookings that need to be delivered in the future
+        $upcomingCount = Order::whereIn('status', ['paid', 'settlement', 'partially_paid'])
+            ->whereHas('booking', function ($q) use ($today) {
+                $q->where('start_date', '>=', $today)
+                  ->orWhere('booking_date', '>=', $today);
+            })->count();
+
+        $needsDelivery = Order::whereIn('status', ['paid', 'partially_paid', 'settlement'])->count();
         $pendingRefunds = class_exists(Refund::class) ? Refund::where('status', 'pending')->count() : 0;
 
         // --- 2. CHARTS DATA ---
@@ -117,16 +124,59 @@ class DashboardController extends Controller
                 return ['name' => $formattedName, 'value' => (int)$item->count];
             });
 
-        // --- 3. RECENT ACTIVITY & LISTS ---
+        // --- 3. LOGISTICS: UPCOMING SERVICE SCHEDULE ---
+        $upcomingSchedule = Order::with(['user', 'booking', 'orderItems.orderable'])
+            ->whereIn('status', ['paid', 'settlement', 'partially_paid'])
+            ->whereHas('booking', function ($query) use ($today) {
+                $query->where('start_date', '>=', $today)
+                      ->orWhere('booking_date', '>=', $today);
+            })
+            ->get()
+            ->map(function ($order) {
+                $booking = $order->booking;
+                $serviceDate = $booking->start_date ?? $booking->booking_date;
+                $type = class_basename($booking->bookable_type);
+
+                // Safe Service Name Resolver (Handles Car Rental brand+model)
+                $firstItem = $order->orderItems->first();
+                $serviceName = $firstItem->name ?? 'Service';
+                if ($firstItem->orderable && isset($firstItem->orderable->name)) {
+                    $serviceName = $firstItem->orderable->name;
+                } elseif ($type === 'CarRental' && $firstItem->orderable) {
+                    $serviceName = $firstItem->orderable->brand . ' ' . $firstItem->orderable->car_model;
+                }
+
+                return [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'customer' => $order->user->name ?? 'Guest',
+                    'service_name' => $serviceName,
+                    'service_type' => $type,
+                    'date' => $serviceDate,
+                    'is_today' => Carbon::parse($serviceDate)->isToday(),
+                    'status' => $order->status,
+                ];
+            })
+            ->sortBy('date')
+            ->values();
+
+        // --- 4. FORMATTERS & RECENT ACTIVITY ---
 
         $formatOrderData = function ($order) {
             $serviceName = 'Unknown';
+            $type = 'Unknown';
             if ($order->orderItems->isNotEmpty()) {
-                $type = class_basename($order->orderItems->first()->orderable_type);
-                $serviceName = trim(preg_replace('/(?<!\ )[A-Z]/', ' $0', $type));
+                $firstItem = $order->orderItems->first();
+                $rawType = class_basename($firstItem->orderable_type);
+                $type = trim(preg_replace('/(?<!\ )[A-Z]/', ' $0', $rawType));
+
+                // Name resolver
+                $serviceName = $firstItem->name ?? 'Service';
+                if ($firstItem->orderable && isset($firstItem->orderable->name)) {
+                    $serviceName = $firstItem->orderable->name;
+                }
             }
 
-            // ✅ Extract Payment Method safely
             $paymentMethod = 'N/A';
             if ($order->transaction) {
                 $paymentMethod = $order->transaction->payment_type ?? 'Manual';
@@ -136,27 +186,28 @@ class DashboardController extends Controller
                 'id' => $order->id,
                 'order_number' => $order->order_number,
                 'customer' => $order->user->name ?? 'Guest',
-                'customer_initials' => strtoupper(substr($order->user->name ?? 'G', 0, 2)), // ✅ For Avatar
+                'customer_initials' => strtoupper(substr($order->user->name ?? 'G', 0, 2)),
                 'email' => $order->user->email ?? '-',
                 'amount' => (float)$order->total_amount,
                 'status' => $order->status,
                 'service' => $serviceName,
-                'payment_method' => ucwords(str_replace('_', ' ', $paymentMethod)), // ✅ Clean format
-                'date_formatted' => $order->created_at->format('d M Y, H:i'), // ✅ Precise date
+                'service_type_label' => $type,
+                'payment_method' => ucwords(str_replace('_', ' ', $paymentMethod)),
+                'date_formatted' => $order->created_at->format('d M Y, H:i'),
                 'date_relative' => $order->created_at->diffForHumans(),
             ];
         };
 
-        // ✅ Eager load 'transaction' for payment info
-        $recentOrders = Order::with(['user', 'orderItems', 'transaction'])
+        $recentOrders = Order::with(['user', 'orderItems.orderable', 'transaction'])
             ->latest()
             ->take(5)
             ->get()
             ->map($formatOrderData);
 
-        $deliveryOrders = Order::with(['user', 'orderItems', 'transaction'])
-            ->whereIn('status', ['paid', 'partially_paid'])
-            ->oldest() // Oldest first to prioritize
+        // This list shows orders based on delivery urgency (Oldest confirmed but not yet delivered)
+        $deliveryOrders = Order::with(['user', 'orderItems.orderable', 'transaction'])
+            ->whereIn('status', ['paid', 'partially_paid', 'settlement'])
+            ->oldest()
             ->take(5)
             ->get()
             ->map($formatOrderData);
@@ -179,6 +230,7 @@ class DashboardController extends Controller
                 ];
             });
 
+        // --- 5. RETURN TO INERTIA ---
         return Inertia::render('Dashboard', [
             'stats' => [
                 'total_revenue' => (float)$totalRevenue,
@@ -187,12 +239,14 @@ class DashboardController extends Controller
                 'total_clients' => (int)$totalClients,
                 'new_clients' => (int)$newClients,
                 'needs_delivery' => (int)$needsDelivery,
+                'upcoming_deliveries_count' => (int)$upcomingCount, // Added new stat
                 'pending_refunds' => (int)$pendingRefunds,
             ],
             'charts' => [
                 'revenue' => $revenueChart,
                 'categories' => $categoryChart,
             ],
+            'upcoming_schedule' => $upcomingSchedule, // New Logistics List
             'recent_orders' => $recentOrders,
             'delivery_orders' => $deliveryOrders,
             'active_planners' => $activeTripPlanners,
