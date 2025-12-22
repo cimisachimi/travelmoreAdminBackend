@@ -6,84 +6,76 @@ use Illuminate\Support\Facades\Route;
 // --- Controller Imports ---
 use App\Http\Controllers\Api\Client\LoginController;
 use App\Http\Controllers\Api\Public\HolidayPackageController;
-use App\Http\Controllers\Api\Public\CarRentalController as PublicCarRentalController; // Correctly aliased
+use App\Http\Controllers\Api\Public\CarRentalController as PublicCarRentalController;
 use App\Http\Controllers\Api\Public\ActivityController as PublicActivityController;
 use App\Http\Controllers\Api\TripPlannerController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController; // Aliased to avoid conflict
-use App\Http\Controllers\Api\Public\PostController as PublicPostController; // ✅ ADD THIS
-use App\Http\Controllers\Api\ProfileController; // ✅ 1. ADD THIS
-use App\Http\Controllers\Api\RefundController; // ✅ ADD THIS
-use App\Http\Controllers\Api\SocialiteController; // Add this import
-use App\Http\Controllers\Api\Public\PlannerController; // ✅ ADD THIS
-use App\Http\Controllers\Api\EmailVerificationController; // <-- ADD THIS
-use App\Http\Controllers\Api\Public\OpenTripController; // Import Controller
-use App\Http\Controllers\Api\Public\GalleryController; // Don't forget to import this!
-use App\Http\Controllers\Api\Public\BannerController; // ✅ ADDED THIS IMPORT
+use App\Http\Controllers\Api\Admin\UserController as ApiAdminUserController;
+use App\Http\Controllers\Api\Public\PostController as PublicPostController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\RefundController;
+use App\Http\Controllers\Api\SocialiteController;
+use App\Http\Controllers\Api\Public\PlannerController;
+use App\Http\Controllers\Api\EmailVerificationController;
+use App\Http\Controllers\Api\Public\OpenTripController;
+use App\Http\Controllers\Api\Public\GalleryController;
+use App\Http\Controllers\Api\Public\BannerController;
+
 /*
 |--------------------------------------------------------------------------
 | Public API Routes
 |--------------------------------------------------------------------------
-|
-| Routes accessible without authentication.
-| All these routes are automatically prefixed with /api by Laravel.
-|
 */
 
-// --- Authentication ---
-Route::post('/register', [LoginController::class, 'register']);
-Route::post('/login', [LoginController::class, 'login']);
+// 1. Critical Auth Routes (Strict Throttling)
+Route::middleware('throttle:login')->group(function () {
+    Route::post('/login', [LoginController::class, 'login']);
+    Route::post('/register', [LoginController::class, 'register']);
+});
 
-// --- Public Listings ---
-// ✅ TAMBAHKAN/UBAH: Rute untuk Holiday Packages
-Route::get('/public/packages', [HolidayPackageController::class, 'index']);
-Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
+// 2. Public Content Routes (Standard API Throttling)
+Route::middleware('throttle:api')->group(function () {
+    Route::get('/public/packages', [HolidayPackageController::class, 'index']);
+    Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
 
-Route::get('/open-trips', [OpenTripController::class, 'index']);
-Route::get('/open-trips/{id}', [OpenTripController::class, 'show']);
+    Route::get('/open-trips', [OpenTripController::class, 'index']);
+    Route::get('/open-trips/{id}', [OpenTripController::class, 'show']);
 
-Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
-Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
-Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
+    Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
+    Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
+    Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
 
-Route::get('/activities', [PublicActivityController::class, 'index']);
-Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
-// --- Webhooks ---
-// ✅ FIXED: Added the implicit /api prefix to match Ngrok/CSRF setup
-// This route should NOT have auth middleware.
+    Route::get('/activities', [PublicActivityController::class, 'index']);
+    Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
+
+    Route::get('/public/posts', [PublicPostController::class, 'index']);
+    Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
+    Route::get('/public/banner', [BannerController::class, 'index']);
+
+    Route::get('/public/planner-config', [PlannerController::class, 'getConfig']);
+    Route::post('/booking/check-price', [BookingController::class, 'checkPrice']);
+    Route::get('/public/galleries', [GalleryController::class, 'index']);
+});
+
+// 3. Webhooks & Special Routes (No/Specific Throttling)
+// Midtrans is excluded to ensure payment notifications are always received
 Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
 
-// ✅ ADD THESE TWO NEW ROUTES FOR THE BLOG
-Route::get('/public/posts', [PublicPostController::class, 'index']);
-Route::get('/public/posts/{slug}', [PublicPostController::class, 'show']);
-Route::get('/public/banner', [BannerController::class, 'index']); // ✅ ADDED THIS ROUTE
-// SOCIALITE AUTH ROUTES
 Route::get('/auth/{provider}/redirect', [SocialiteController::class, 'redirectToProvider']);
 Route::get('/auth/{provider}/callback', [SocialiteController::class, 'handleProviderCallback']);
 
 Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
-    ->name('verification.verify.api') // <-- Must match the name from Step 1
-    ->middleware(['signed', 'throttle:6,1']); // 'signed' middleware is crucial for security
+    ->name('verification.verify.api')
+    ->middleware(['signed', 'throttle:6,1']);
 
-Route::get('/public/planner-config', [PlannerController::class, 'getConfig']);
-Route::post('/booking/check-price', [BookingController::class, 'checkPrice']);
-Route::get('/public/galleries', [GalleryController::class, 'index']);
 /*
-
-
-
-
 |--------------------------------------------------------------------------
 | Authenticated Client API Routes
 |--------------------------------------------------------------------------
-|
-| Routes requiring user authentication (Sanctum).
-| All these routes are automatically prefixed with /api by Laravel.
-|
 */
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
     Route::get('/user', fn (Request $request) => $request->user());
 
@@ -91,56 +83,40 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('verification.send');
 
     // PROFILE
-    Route::get('/my-profile', [ProfileController::class, 'show']);     // ✅ 3. ADD THIS (For SettingsTab)
-    Route::put('/my-profile', [ProfileController::class, 'update']);   // ✅ 4. ADD THIS (For SettingsTab)
- //   Route::get('/my-refunds', [RefundController::class, 'index']);    // ✅ 6. ADD THIS (For RefundsTab)
+    Route::get('/my-profile', [ProfileController::class, 'show']);
+    Route::put('/my-profile', [ProfileController::class, 'update']);
+    Route::put('/email/update', [ProfileController::class, 'updateEmail']);
 
-    Route::put('/email/update', [ProfileController::class, 'updateEmail']); // ✅ ADD THIS
-    // --- Trip Planner ---
+    // TRIP PLANNER
     Route::get('/trip-planner', [TripPlannerController::class, 'show']);
     Route::post('/trip-planner', [TripPlannerController::class, 'store']);
-    Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']); // Keep specific booking route
+    Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']);
 
+    // BOOKINGS
     Route::post('/open-trips/{id}/book', [BookingController::class, 'storeOpenTripBooking']);
-
     Route::post('/packages/{packageId}/book', [BookingController::class, 'storeHolidayPackageBooking']);
-    // --- Car Rentals ---
     Route::post('/car-rentals/{carRental}/book', [BookingController::class, 'storeCarRentalBooking']);
-    // --- Activity Booking ---
-    Route::post('/activities/{activity}/book', [BookingController::class, 'storeActivityBooking']); // <-- Add this
+    Route::post('/activities/{activity}/book', [BookingController::class, 'storeActivityBooking']);
 
-    // --- Orders & History ---
+    // ORDERS & HISTORY
     Route::get('/my-orders', [OrderController::class, 'index']);
-    Route::get('/my-orders/{id}', [OrderController::class, 'show']); // Added show route
-    Route::get('/my-bookings', [BookingController::class, 'index']); // Get user's bookings (consider removing if orders are enough)
-    // Removed old booking show/update/delete, manage through orders
+    Route::get('/my-orders/{id}', [OrderController::class, 'show']);
+    Route::get('/my-bookings', [BookingController::class, 'index']);
 
-    // --- Payment ---
+    // PAYMENT
     Route::post('/payment/create-transaction', [PaymentController::class, 'createTransaction']);
-    // Removed /orders/{order}/pay and /payment/token as they are covered by create-transaction
+
     // REFUNDS
     Route::get('/my-refunds', [RefundController::class, 'index']);
-    Route::post('/my-refunds', [RefundController::class, 'store']); // Add this line
-
+    Route::post('/my-refunds', [RefundController::class, 'store']);
 });
 
 /*
 |--------------------------------------------------------------------------
 | Admin API Routes
 |--------------------------------------------------------------------------
-|
-| Routes requiring admin authentication.
-| These routes are prefixed with /api/admin.
-|
 */
-Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
-    // Using apiResource automatically creates standard CRUD routes
-    // (index, store, show, update, destroy)
-
-    // Add apiResources for other admin sections (CarRentals, Activities, Orders, etc.) here
-    // Example:
+Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])->prefix('admin')->group(function () {
+    // Standard CRUD for Admin (Example placeholders - Add your specific admin resources here)
     // Route::apiResource('car-rentals', \App\Http\Controllers\Admin\CarRentalController::class);
-    // Route::apiResource('activities', \App\Http\Controllers\Admin\ActivityController::class);
-    // Route::apiResource('orders', \App\Http\Controllers\Admin\OrderController::class);
-    // Route::apiResource('transactions', \App\Http\Controllers\Admin\TransactionController::class);
 });

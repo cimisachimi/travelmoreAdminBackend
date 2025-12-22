@@ -308,6 +308,10 @@ class PaymentController extends Controller
                         LaravelNotification::send($admins, new NewOrderAdminNotification($order));
                         Log::info('Admin notification email queued for Order #' . $order->order_number);
                     }
+                    // ✅ ADD THIS: Customer Receipt Notification
+                    $order->user->notify(new \App\Notifications\OrderReceiptNotification($order));
+                    Log::info('Customer receipt email queued for Order #' . $order->order_number);
+
                 } catch (\Exception $e) {
                     Log::error('Failed to send admin notification: ' . $e->getMessage());
                 }

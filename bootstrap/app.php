@@ -16,7 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // --- ADD THE CORS MIDDLEWARE HERE ---
         // This is crucial for your frontend to talk to the backend.
         $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
-
+        $middleware->validateCsrfTokens(except: [
+        'api/midtrans/notification',
+    ]);
         // This keeps your Inertia middleware for the admin panel.
         $middleware->web(append: [
             SetLocaleFromHeader::class,
@@ -26,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // ✅ ADD THIS SECTION: API Middleware Group
         $middleware->api(append: [
+            \Illuminate\Routing\Middleware\ThrottleRequests::class.':api', // Throttles all /api routes
             SetLocaleFromHeader::class, // <-- Add this here so API checks the language header
         ]);
 
