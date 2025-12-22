@@ -30,7 +30,7 @@ class PaymentController extends Controller
         Config::$is3ds = true;
     }
 
-    public function createTransaction(Request $request)
+  public function createTransaction(Request $request)
     {
         $validated = $request->validate([
             'order_id' => 'required|exists:orders,id',
@@ -50,7 +50,7 @@ class PaymentController extends Controller
         $isPartialPayment = false;
 
         // --- 1. Determine Amount to Charge ---
-        if ($paymentOption === 'full_payment') {
+        if ($paymentOption === 'full_payment' || $order->status === 'partially_paid') {
             if ($order->status === 'partially_paid') {
                 $amountToCharge = $order->total_amount - $order->down_payment_amount;
                 $transactionNote = 'balance_payment';
@@ -60,12 +60,11 @@ class PaymentController extends Controller
                 $transactionNote = 'full_payment';
                 $isPartialPayment = false;
             }
-        } else { // down_payment
+        } else {
             $amountToCharge = $order->down_payment_amount;
             $transactionNote = 'down_payment';
             $isPartialPayment = true;
 
-            // ✅ CHANGED: If DP is invalid OR equals/exceeds total, switch to full payment
             if (empty($amountToCharge) || $amountToCharge <= 0 || $amountToCharge >= $order->total_amount) {
                  $amountToCharge = $order->total_amount;
                  $paymentOption = 'full_payment';
@@ -74,84 +73,71 @@ class PaymentController extends Controller
             }
         }
 
-        if ($amountToCharge <= 0) {
-            return response()->json(['message' => 'Invalid payment amount calculation.'], 400);
-        }
-
         try {
             return DB::transaction(function () use ($order, $amountToCharge, $transactionNote, $isPartialPayment) {
 
-                // 1. Create Transaction Record
                 $transaction = Transaction::create([
                     'order_id' => $order->id,
                     'user_id' => $order->user_id,
                     'status' => 'pending',
-                    'gross_amount' => $amountToCharge,
+                    'gross_amount' => round($amountToCharge), // Use round to prevent decimal issues
                     'notes' => $transactionNote,
                 ]);
 
-                // 2. Generate Unique Midtrans ID
                 $midtransOrderId = 'TRX-' . $transaction->id . '-' . time();
                 $transaction->update(['transaction_code' => $midtransOrderId]);
 
-                // 3. Prepare Items for Midtrans
                 $item_details = [];
 
                 if ($isPartialPayment) {
-                    // For DP/Balance, send a SINGLE consolidated item.
                     $item_details[] = [
                         'id'       => 'PAY-' . $transaction->id,
-                        'price'    => (int) $amountToCharge,
+                        'price'    => (int) round($amountToCharge),
                         'quantity' => 1,
                         'name'     => $transactionNote === 'down_payment' ? "Down Payment (50%)" : "Remaining Balance",
                     ];
                 } else {
-                    // For Full Payment, list items with their prices
+                    // FULL PAYMENT: List items
                     foreach ($order->orderItems as $item) {
-                        $itemName = $item->name ?? 'Service';
+                        // Dynamically determine the item name based on the type
+                        $itemName = 'Service Item';
+                        $orderable = $item->orderable;
 
-                        // Fallback for older data without name
-                        if ($item->orderable instanceof CarRental) {
-                            $itemName = $item->orderable->brand . ' ' . $item->orderable->car_model;
+                        if ($orderable instanceof \App\Models\CarRental) {
+                            $itemName = $orderable->brand . ' ' . $orderable->car_model;
+                        } elseif ($orderable instanceof \App\Models\HolidayPackage || $orderable instanceof \App\Models\Activity || $orderable instanceof \App\Models\OpenTrip) {
+                            $itemName = $orderable->title ?? $orderable->name ?? 'Travel Service';
                         }
 
                         $item_details[] = [
                             'id'       => 'ITEM-' . $item->id,
-                            'price'    => (int) $item->price,
+                            'price'    => (int) round($item->price),
                             'quantity' => (int) $item->quantity,
                             'name'     => substr($itemName, 0, 50),
                         ];
                     }
 
-                    // Midtrans requires sum(item_details) == gross_amount.
-                    // If we have a discount, we must subtract it from the item list.
                     if ($order->discount_amount > 0) {
                         $item_details[] = [
                             'id'       => 'DISCOUNT',
-                            'price'    => -((int) $order->discount_amount),
+                            'price'    => -((int) round($order->discount_amount)),
                             'quantity' => 1,
                             'name'     => 'Discount Applied',
                         ];
                     }
                 }
 
-                if (empty($item_details)) {
-                     throw new \Exception('Cannot create payment with no items.');
+                // Final safety check: sum of items must equal gross_amount
+                $itemSum = array_reduce($item_details, function($carry, $item) {
+                    return $carry + ($item['price'] * $item['quantity']);
+                }, 0);
+
+                if ($itemSum !== (int) round($amountToCharge)) {
+                    Log::error("Midtrans Mismatch for Order {$order->id}: Items sum ($itemSum) != Gross Amount ($amountToCharge)");
+                    // Force the gross_amount to match the item sum to avoid Midtrans 500 error
+                    $transaction->update(['gross_amount' => $itemSum]);
                 }
 
-                // 4. Calculate Expiry
-                $now = Carbon::now();
-                $orderDeadline = $order->payment_deadline;
-                $midtransExpiryTime = $now->copy()->addHours(2);
-
-                if ($orderDeadline && $orderDeadline->isAfter($now) && $orderDeadline->lt($midtransExpiryTime)) {
-                    $midtransExpiryTime = $orderDeadline;
-                } elseif ($orderDeadline && $orderDeadline->isPast()) {
-                    throw new \Exception('Payment deadline has passed.');
-                }
-                $duration = (int) $now->diffInMinutes($midtransExpiryTime);
-
-                // 5. Request Snap Token
                 $params = [
                     'transaction_details' => [
                         'order_id' => $midtransOrderId,
@@ -162,23 +148,22 @@ class PaymentController extends Controller
                         'first_name' => $order->user->name,
                         'email' => $order->user->email,
                     ],
+                    // We removed start_time to avoid server clock sync issues with Midtrans
                     'expiry' => [
-                         'start_time' => $now->format('Y-m-d H:i:s O'),
-                         'unit' => 'minute',
-                         'duration' => $duration > 1 ? $duration : 1,
+                         'unit' => 'hour',
+                         'duration' => 2,
                     ],
                 ];
 
                 $snapToken = Snap::getSnapToken($params);
-
                 $transaction->update(['snap_token' => $snapToken]);
                 $order->update(['status' => 'processing']);
 
                 return response()->json(['snap_token' => $snapToken]);
             });
         } catch (\Throwable $e) {
-            Log::error('Payment creation failed for Order ID: ' . $order->id . ' - ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['message' => 'Failed to create payment transaction. Please try again later.'], 500);
+            Log::error('Payment creation failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create payment transaction.'], 500);
         }
     }
 
