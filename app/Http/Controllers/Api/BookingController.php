@@ -768,11 +768,15 @@ class BookingController extends Controller
     public function storeTripPlannerBooking(Request $request)
     {
         $validated = $request->validate([
+            'id' => 'required|integer|exists:trip_planners,id', // ✅ Ensure we know which plan to book
             'discount_code' => 'nullable|string|exists:discount_codes,code'
         ]);
 
         $user = Auth::user();
-        $tripPlanner = TripPlanner::where('user_id', $user->id)->firstOrFail();
+        $tripPlanner = TripPlanner::where('id', $validated['id'])
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
         $tripDate = $tripPlanner->departure_date ?? now()->toDateString();
 
         $setting = Setting::where('key', 'trip_planner_price')->first();

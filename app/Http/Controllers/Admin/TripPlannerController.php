@@ -13,7 +13,7 @@ class TripPlannerController extends Controller
 {
     public function index()
     {
-        $planners = TripPlanner::with(['user', 'bookings'])
+      $planners = TripPlanner::with(['user', 'bookings'])
             ->latest()
             ->paginate(10);
 

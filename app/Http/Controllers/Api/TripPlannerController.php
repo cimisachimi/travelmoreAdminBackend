@@ -9,15 +9,26 @@ use Illuminate\Http\Request;
 class TripPlannerController extends Controller
 {
     /**
-     * Get the authenticated user's trip planner data.
+     * Get ALL of the authenticated user's trip planners.
+     */
+    public function index(Request $request)
+    {
+        // Retrieve the collection of planners
+        $planners = $request->user()->tripPlanners()->get();
+
+        return response()->json($planners);
+    }
+
+    /**
+     * Get a specific trip planner by ID.
      */
     public function show(Request $request)
     {
-        $planner = $request->user()->tripPlanner()->first();
+        // ✅ Fix: Only take $request as an argument to stop the error.
+        // It fetches the latest plan for the user.
+        $planner = $request->user()->tripPlanners()->latest()->first();
 
         if (!$planner) {
-            // It's okay if a user doesn't have a plan yet.
-            // Return a null response so the frontend knows to show a blank form.
             return response()->json(null, 200);
         }
 
@@ -27,18 +38,19 @@ class TripPlannerController extends Controller
     /**
      * Create or update a trip planner for the authenticated user.
      */
-    public function store(Request $request)
-    {
-        $user = $request->user();
+  public function store(Request $request)
+{
+    $user = $request->user();
 
-        // This is a powerful Eloquent method that finds a record
-        // based on the first array, and if it exists, updates it
-        // with the second array. If not, it creates a new one.
-        $planner = TripPlanner::updateOrCreate(
-            ['user_id' => $user->id], // The key to find the record by
-            $request->all()          // The data to update or create with
-        );
+    $planner = TripPlanner::updateOrCreate(
+        [
+            'id' => $request->id, // ✅ MUST include ID here to allow creating new rows
+            'user_id' => $user->id
+        ],
+        $request->all()
+    );
 
-        return response()->json($planner, 200);
-    }
+    return response()->json($planner, 200);
 }
+}
+

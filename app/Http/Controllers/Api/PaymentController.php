@@ -282,6 +282,17 @@ class PaymentController extends Controller
                 if ($order->booking && $order->booking->isDirty()) {
                     $order->booking->save();
                 }
+                // ✅ ADD THIS BLOCK HERE
+                // If the payment is successful (Full Payment), update the TripPlanner workflow
+                if ($order->status === 'paid' || $order->status === 'confirmed') {
+                    // Check if this booking is for a Trip Planner
+                    if ($order->booking && $order->booking->bookable instanceof TripPlanner) {
+                        $order->booking->bookable->update([
+                            'status' => 'Waiting to Start', // Move to the "Craft" stage for Admin
+                            'payment_status' => 'Paid'
+                        ]);
+                    }
+                }
             });
 
             // ✅ SEND EMAIL NOTIFICATION

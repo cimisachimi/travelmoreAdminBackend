@@ -67,9 +67,10 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * Get the trip planner associated with the user.
      */
-    public function tripPlanner()
+    // To this:
+    public function tripPlanners()
     {
-        return $this->hasOne(TripPlanner::class);
+        return $this->hasMany(TripPlanner::class);
     }
 
     public function orders()

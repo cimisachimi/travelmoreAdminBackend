@@ -88,8 +88,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/email/update', [ProfileController::class, 'updateEmail']);
 
     // TRIP PLANNER
-    Route::get('/trip-planner', [TripPlannerController::class, 'show']);
-    Route::post('/trip-planner', [TripPlannerController::class, 'store']);
+    // TRIP PLANNER
+Route::get('/trip-planner', [TripPlannerController::class, 'show']);
+Route::post('/trip-planner', [TripPlannerController::class, 'store']);
+    Route::get('/trip-planner/{id}', [TripPlannerController::class, 'show']); // View specific
+
     Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']);
 
     // BOOKINGS
