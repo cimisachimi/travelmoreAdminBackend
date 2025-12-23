@@ -49,6 +49,7 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
 
     Route::get('/activities', [PublicActivityController::class, 'index']);
+    Route::get('/activities/slug/{slug}', [PublicActivityController::class, 'showBySlug']);
     Route::get('/activities/{activity}', [PublicActivityController::class, 'show']);
 
     Route::get('/public/posts', [PublicPostController::class, 'index']);

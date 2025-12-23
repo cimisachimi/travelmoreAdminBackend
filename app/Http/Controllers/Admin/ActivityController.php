@@ -9,10 +9,13 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Illuminate\Support\Str; // Required for slug generation
 
 class ActivityController extends Controller
 {
+    /**
+     * Display a listing of the resource.
+     */
     public function index(Request $request)
     {
         $query = Activity::with('translations');
@@ -33,11 +36,17 @@ class ActivityController extends Controller
         ]);
     }
 
+    /**
+     * Show the form for creating a new resource.
+     */
     public function create()
     {
         return Inertia::render('Admin/Activity/Create');
     }
 
+    /**
+     * Store a newly created resource in storage.
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -45,9 +54,9 @@ class ActivityController extends Controller
             'price' => 'required|numeric|min:0',
             'status' => 'nullable|string',
             'duration' => 'nullable|string|max:255',
-            'google_map_url' => 'nullable|url', // ✅ Added
+            'google_map_url' => 'nullable|url',
 
-            // ✅ Includes Validation (Structured JSON)
+            // Includes (Structured JSON)
             'includes' => 'nullable|array',
             'includes.included' => 'nullable|array',
             'includes.included.*' => 'nullable|string|max:255',
@@ -67,15 +76,15 @@ class ActivityController extends Controller
             'translations.en.description' => 'nullable|string',
             'translations.en.location' => 'required|string|max:255',
             'translations.en.category' => 'nullable|string|max:255',
-            'translations.en.itinerary' => 'nullable|string', // ✅ Added
-            'translations.en.notes' => 'nullable|string',     // ✅ Added
+            'translations.en.itinerary' => 'nullable|string',
+            'translations.en.notes' => 'nullable|string',
 
             'translations.id.name' => 'required|string|max:255',
             'translations.id.description' => 'nullable|string',
             'translations.id.location' => 'required|string|max:255',
             'translations.id.category' => 'nullable|string|max:255',
-            'translations.id.itinerary' => 'nullable|string', // ✅ Added
-            'translations.id.notes' => 'nullable|string',     // ✅ Added
+            'translations.id.itinerary' => 'nullable|string',
+            'translations.id.notes' => 'nullable|string',
         ]);
 
         try {
@@ -86,11 +95,12 @@ class ActivityController extends Controller
                 'price' => $validated['price'],
                 'status' => $validated['status'] ?? 'active',
                 'duration' => $validated['duration'],
-                'google_map_url' => $validated['google_map_url'] ?? null, // ✅ Save Map
-                'includes' => $validated['includes'] ?? ['included' => [], 'excluded' => []], // ✅ Save Includes
+                'google_map_url' => $validated['google_map_url'] ?? null,
+                'includes' => $validated['includes'] ?? ['included' => [], 'excluded' => []],
                 'addons' => $request->addons ?? [],
             ]);
 
+            // Save translations and generate slugs
             $this->updateTranslations($activity, $validated['translations']);
 
             if ($request->hasFile('thumbnail')) {
@@ -112,6 +122,9 @@ class ActivityController extends Controller
         }
     }
 
+    /**
+     * Show the form for editing the specified resource.
+     */
     public function edit(Activity $activity)
     {
         $activity->load('images', 'translations');
@@ -121,7 +134,7 @@ class ActivityController extends Controller
 
         $activityData['is_active'] = (bool) $activity->is_active;
         $activityData['addons'] = $activity->addons ?? [];
-        $activityData['includes'] = $activity->includes ?? ['included' => [], 'excluded' => []]; // ✅ Ensure structure
+        $activityData['includes'] = $activity->includes ?? ['included' => [], 'excluded' => []];
 
         $activityData['translations'] = [
             'en' => $translations['en'] ?? (object)[],
@@ -133,6 +146,9 @@ class ActivityController extends Controller
         ]);
     }
 
+    /**
+     * Update the specified resource in storage.
+     */
     public function update(Request $request, Activity $activity)
     {
         $validated = $request->validate([
@@ -140,9 +156,8 @@ class ActivityController extends Controller
             'price' => 'required|numeric|min:0',
             'status' => 'nullable|string',
             'duration' => 'nullable|string|max:255',
-            'google_map_url' => 'nullable|url', // ✅ Added
+            'google_map_url' => 'nullable|url',
 
-            // ✅ Includes Validation
             'includes' => 'nullable|array',
             'includes.included' => 'nullable|array',
             'includes.included.*' => 'nullable|string|max:255',
@@ -158,15 +173,15 @@ class ActivityController extends Controller
             'translations.en.description' => 'nullable|string',
             'translations.en.location' => 'required|string|max:255',
             'translations.en.category' => 'nullable|string|max:255',
-            'translations.en.itinerary' => 'nullable|string', // ✅ Added
-            'translations.en.notes' => 'nullable|string',     // ✅ Added
+            'translations.en.itinerary' => 'nullable|string',
+            'translations.en.notes' => 'nullable|string',
 
             'translations.id.name' => 'required|string|max:255',
             'translations.id.description' => 'nullable|string',
             'translations.id.location' => 'required|string|max:255',
             'translations.id.category' => 'nullable|string|max:255',
-            'translations.id.itinerary' => 'nullable|string', // ✅ Added
-            'translations.id.notes' => 'nullable|string',     // ✅ Added
+            'translations.id.itinerary' => 'nullable|string',
+            'translations.id.notes' => 'nullable|string',
         ]);
 
         try {
@@ -177,11 +192,12 @@ class ActivityController extends Controller
                 'price' => $validated['price'],
                 'status' => $validated['status'] ?? 'active',
                 'duration' => $validated['duration'],
-                'google_map_url' => $validated['google_map_url'] ?? null, // ✅ Update Map
-                'includes' => $validated['includes'] ?? ['included' => [], 'excluded' => []], // ✅ Update Includes
+                'google_map_url' => $validated['google_map_url'] ?? null,
+                'includes' => $validated['includes'] ?? ['included' => [], 'excluded' => []],
                 'addons' => $request->addons ?? [],
             ]);
 
+            // Update translations and regenerate slugs
             $this->updateTranslations($activity, $validated['translations']);
 
             DB::commit();
@@ -193,7 +209,10 @@ class ActivityController extends Controller
         }
     }
 
-   public function destroy(Activity $activity)
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Activity $activity)
     {
         try {
             DB::transaction(function () use ($activity) {
@@ -317,16 +336,24 @@ class ActivityController extends Controller
             Storage::disk('public')->delete($image->url);
         }
     }
-    protected function updateTranslations(Activity $activity, array $translationsData)
-{
-    foreach ($translationsData as $locale => $data) {
-        // Assign to a variable so we can access it
-        $translation = $activity->translateOrNew($locale);
-        $translation->fill($data);
 
-        // Automatically generate the slug from the name
-        $translation->slug = Str::slug($data['name']) . '-' . Str::random(5);
+    /**
+     * Handle updating Activity translations and automatic slug generation.
+     */
+    protected function updateTranslations(Activity $activity, array $translationsData)
+    {
+        foreach ($translationsData as $locale => $data) {
+            // Retrieve existing translation or create a new one
+            $translation = $activity->translateOrNew($locale);
+            $translation->fill($data);
+
+            // Automatically generate the unique slug from the name
+            if (isset($data['name'])) {
+                $translation->slug = Str::slug($data['name']) . '-' . Str::random(5);
+            }
+        }
+
+        // Save the activity and its associated translations
+        $activity->save();
     }
-    $activity->save();
-}
 }

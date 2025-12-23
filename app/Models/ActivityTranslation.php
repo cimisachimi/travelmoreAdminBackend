@@ -17,6 +17,7 @@ class ActivityTranslation extends Model
         'location',
         'category',
         'itinerary', // ✅ Added
+        'slug', // ✅ Add this
         'notes',     // ✅ Added
     ];
 }
