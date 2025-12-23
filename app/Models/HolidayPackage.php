@@ -21,6 +21,7 @@ class HolidayPackage extends Model implements TranslatableContract
         'description',
         'location',
         'category',
+        'slug', // ✅ Tambahkan slug di sini
     ];
 
     // Hapus atribut terjemahan dari fillable utama

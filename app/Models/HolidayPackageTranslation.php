@@ -15,6 +15,7 @@ class HolidayPackageTranslation extends Model
         'description',
         'location',
         'category',
+        'slug',   // ✅ Tambahkan slug di sini
         'locale', // Locale harus fillable
     ];
 

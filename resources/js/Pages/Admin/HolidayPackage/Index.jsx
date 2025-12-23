@@ -265,7 +265,7 @@ export default function HolidayPackageIndex({ auth, packages, filters }) {
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem asChild>
-                                <Link href={`/public/packages/${pkg.id}`} className="cursor-pointer" target="_blank">
+                                <Link href={route('admin.packages.show', pkg.id)} className="cursor-pointer">
                                     <Search className="mr-2 h-4 w-4" /> Preview
                                 </Link>
                               </DropdownMenuItem>

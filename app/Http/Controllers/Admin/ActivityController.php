@@ -318,10 +318,15 @@ class ActivityController extends Controller
         }
     }
     protected function updateTranslations(Activity $activity, array $translationsData)
-    {
-        foreach ($translationsData as $locale => $data) {
-            $activity->translateOrNew($locale)->fill($data);
-        }
-        $activity->save();
+{
+    foreach ($translationsData as $locale => $data) {
+        // Assign to a variable so we can access it
+        $translation = $activity->translateOrNew($locale);
+        $translation->fill($data);
+
+        // Automatically generate the slug from the name
+        $translation->slug = Str::slug($data['name']) . '-' . Str::random(5);
     }
+    $activity->save();
+}
 }

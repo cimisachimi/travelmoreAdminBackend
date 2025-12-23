@@ -29,6 +29,7 @@ class Activity extends Model implements TranslatableContract
         'category',
         'itinerary',      // ✅ Added (Text)
         'notes',          // ✅ Added (Text)
+        'slug', // ✅ Add this
     ];
 
     protected $casts = [
