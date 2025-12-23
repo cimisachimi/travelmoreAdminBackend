@@ -72,6 +72,26 @@ class HolidayPackageController extends Controller
     /**
      * Get a single ACTIVE holiday package by ID.
      */
+
+    public function showBySlug($slug)
+    {
+        // Search through the translations table for the slug
+        $package = HolidayPackage::with('images')
+            ->where('is_active', true)
+            ->whereHas('translations', function ($query) use ($slug) {
+                $query->where('slug', $slug);
+            })
+            ->first();
+
+        if (!$package) {
+            return response()->json(['message' => 'Package not found'], 404);
+        }
+
+        $formattedPackage = $this->formatPackageData($package);
+
+        return response()->json($formattedPackage);
+    }
+
     public function show($id)
     {
         // ✅ FIX: Prevent accessing Draft packages via direct link

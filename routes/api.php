@@ -39,6 +39,7 @@ Route::middleware('throttle:login')->group(function () {
 Route::middleware('throttle:api')->group(function () {
     Route::get('/public/packages', [HolidayPackageController::class, 'index']);
     Route::get('/public/packages/{id}', [HolidayPackageController::class, 'show']);
+    Route::get('/public/packages/slug/{slug}', [HolidayPackageController::class, 'showBySlug']);
 
     Route::get('/open-trips', [OpenTripController::class, 'index']);
     Route::get('/open-trips/{id}', [OpenTripController::class, 'show']);
@@ -89,8 +90,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // TRIP PLANNER
     // TRIP PLANNER
-Route::get('/trip-planner', [TripPlannerController::class, 'show']);
-Route::post('/trip-planner', [TripPlannerController::class, 'store']);
+    Route::get('/trip-planner', [TripPlannerController::class, 'show']);
+    Route::post('/trip-planner', [TripPlannerController::class, 'store']);
     Route::get('/trip-planner/{id}', [TripPlannerController::class, 'show']); // View specific
 
     Route::post('/trip-planner/book', [BookingController::class, 'storeTripPlannerBooking']);
