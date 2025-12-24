@@ -42,10 +42,12 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/public/packages/slug/{slug}', [HolidayPackageController::class, 'showBySlug']);
 
     Route::get('/open-trips', [OpenTripController::class, 'index']);
+    Route::get('/open-trips/slug/{slug}', [OpenTripController::class, 'showBySlug']); // ✅ Added
     Route::get('/open-trips/{id}', [OpenTripController::class, 'show']);
 
     Route::get('/public/car-rentals', [PublicCarRentalController::class, 'index']);
     Route::get('/public/car-rentals/{carRental}', [PublicCarRentalController::class, 'show']);
+    Route::get('/public/car-rentals/slug/{slug}', [PublicCarRentalController::class, 'showBySlug']); // ✅ Add this line
     Route::get('/public/car-rentals/{carRental}/availability', [PublicCarRentalController::class, 'getAvailability']);
 
     Route::get('/activities', [PublicActivityController::class, 'index']);

@@ -14,7 +14,7 @@ class CarRentalController extends Controller
     public function index(Request $request)
     {
         $locale = $request->input('locale', 'en');
-        
+
         // ✅ UPDATED: Only fetch cars that are globally 'available'
         $carRentals = CarRental::where('status', 'available')
             ->with(['images', 'translations'])
@@ -27,7 +27,7 @@ class CarRentalController extends Controller
             if ($localeTranslation) {
                 $translation = $localeTranslation;
             }
-            
+
             if ($translation) {
                 $translatable = ['description', 'car_type', 'transmission', 'fuel_type', 'features'];
                 foreach ($translatable as $attr) {
@@ -109,8 +109,20 @@ class CarRentalController extends Controller
 
         return response()->json($formattedAvailability);
     }
+    public function showBySlug($slug)
+{
+    // Query the main table since the slug is stored there
+    $carRental = CarRental::with(['translations', 'images', 'availabilities'])
+        ->where('slug', $slug)
+        ->firstOrFail();
 
-    
+    return response()->json([
+        'success' => true,
+        'data' => $carRental
+    ]);
+}
+
+
     public function orders()
     {
         return $this->morphMany(Order::class, 'orderable');

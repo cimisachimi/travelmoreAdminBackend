@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str; // Added for slug generation
 
 class OpenTripController extends Controller
 {
@@ -59,7 +60,7 @@ class OpenTripController extends Controller
             'includes' => 'nullable|array',
             'excludes' => 'nullable|array',
 
-            // ✅ Addons Validation
+            // Addons Validation
             'addons' => 'nullable|array',
             'addons.*.name' => 'required|string',
             'addons.*.price' => 'required|numeric',
@@ -69,6 +70,13 @@ class OpenTripController extends Controller
 
         DB::beginTransaction();
         try {
+            // Generate Slugs for both locales
+            $enData = $validated['en'];
+            $enData['slug'] = Str::slug($enData['name']) . '-' . Str::random(5);
+
+            $idData = $validated['id'];
+            $idData['slug'] = Str::slug($idData['name']) . '-' . Str::random(5);
+
             $cost = [
                 'included' => $request->includes ?? [],
                 'excluded' => $request->excludes ?? []
@@ -83,11 +91,11 @@ class OpenTripController extends Controller
                 'meeting_points' => $request->meeting_points,
                 'itinerary' => $request->itinerary,
                 'cost' => $cost,
-                'addons' => $request->addons ?? [], // ✅ Save addons
+                'addons' => $request->addons ?? [],
 
-                // Translations
-                'en' => $validated['en'],
-                'id' => $validated['id'],
+                // Translations with Slugs
+                'en' => $enData,
+                'id' => $idData,
             ];
 
             $trip = OpenTrip::create($data);
@@ -115,7 +123,6 @@ class OpenTripController extends Controller
     public function edit(OpenTrip $openTrip)
     {
         $openTrip->load(['translations', 'images']);
-        // Cast is_active to boolean for React
         $openTrip->is_active = (bool) $openTrip->is_active;
 
         $cost = $openTrip->cost ?? ['included' => [], 'excluded' => []];
@@ -149,7 +156,6 @@ class OpenTripController extends Controller
             'includes' => 'nullable|array',
             'excludes' => 'nullable|array',
 
-            // ✅ Addons Validation
             'addons' => 'nullable|array',
             'addons.*.name' => 'required|string',
             'addons.*.price' => 'required|numeric',
@@ -157,6 +163,13 @@ class OpenTripController extends Controller
 
         DB::beginTransaction();
         try {
+            // Regenerate Slugs on Update
+            $enData = $validated['en'];
+            $enData['slug'] = Str::slug($enData['name']) . '-' . Str::random(5);
+
+            $idData = $validated['id'];
+            $idData['slug'] = Str::slug($idData['name']) . '-' . Str::random(5);
+
             $cost = [
                 'included' => $request->includes ?? [],
                 'excluded' => $request->excludes ?? []
@@ -171,9 +184,9 @@ class OpenTripController extends Controller
                 'meeting_points' => $request->meeting_points,
                 'itinerary' => $request->itinerary,
                 'cost' => $cost,
-                'addons' => $request->addons ?? [], // ✅ Update addons
-                'en' => $validated['en'],
-                'id' => $validated['id'],
+                'addons' => $request->addons ?? [],
+                'en' => $enData,
+                'id' => $idData,
             ]);
 
             DB::commit();
@@ -190,8 +203,6 @@ class OpenTripController extends Controller
         $openTrip->delete();
         return redirect()->route('admin.open-trips.index')->with('success', 'Trip deleted.');
     }
-
-    // --- Image Handling Methods ---
 
     public function storeImage(Request $request, OpenTrip $openTrip)
     {
@@ -214,8 +225,8 @@ class OpenTripController extends Controller
     {
         $request->validate(['image_id' => 'required|exists:images,id']);
 
-        $openTrip->images()->update(['type' => 'gallery']); // Reset all
-        $openTrip->images()->where('id', $request->image_id)->update(['type' => 'thumbnail']); // Set new
+        $openTrip->images()->update(['type' => 'gallery']);
+        $openTrip->images()->where('id', $request->image_id)->update(['type' => 'thumbnail']);
 
         return back()->with('success', 'Thumbnail updated.');
     }

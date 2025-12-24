@@ -12,7 +12,7 @@ class OpenTrip extends Model implements TranslatableContract
 {
     use HasFactory, Translatable;
 
-    public $translatedAttributes = ['name', 'location', 'category', 'description'];
+    public $translatedAttributes = ['name', 'location', 'category', 'description','slug'];
 
     protected $fillable = [
         'is_active',

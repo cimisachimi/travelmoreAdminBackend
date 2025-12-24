@@ -11,6 +11,7 @@ class CarRental extends Model
 
     protected $fillable = [
         'car_model',
+        'slug', // ✅ Add this line
         'brand',
         'car_type',
         'category', // Add this line

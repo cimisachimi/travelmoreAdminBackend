@@ -10,7 +10,7 @@ use App\Models\CarRentalTranslation;
 use App\Models\CarRentalAvailability;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
-
+use Illuminate\Support\Str;
 class CarRentalController extends Controller
 {
 public function index(Request $request)
@@ -57,8 +57,11 @@ public function index(Request $request)
             'thumbnail' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'gallery.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
         ]);
+        // ✅ Generate slug from car_model
+        $data = $request->only('car_model', 'brand', 'category', 'price_per_day');
+        $data['slug'] = Str::slug($request->car_model) . '-' . Str::random(5);
 
-        $carRental = CarRental::create($request->only('car_model', 'brand', 'category', 'price_per_day'));
+        $carRental = CarRental::create($data);
 
         if ($request->hasFile('thumbnail')) {
             $path = $request->file('thumbnail')->store('images/thumbnails', 'public');
@@ -76,59 +79,74 @@ public function index(Request $request)
     }
 
     public function update(Request $request, CarRental $carRental)
-    {
-        $validatedData = $request->validate([
-            'brand' => 'required|string|max:255',
-            'car_model' => 'required|string|max:255',
-            'category' => 'required|string|in:regular,exclusive', // New field validation
-            'capacity' => 'nullable|integer|min:0',
-            'trunk_size' => 'nullable|integer|min:0',
-            'price_per_day' => 'required|numeric|min:0',
-            'status' => 'required|string|in:available,unavailable,maintenance',
-            'translations' => 'required|array',
-            'translations.en' => 'required|array',
-            'translations.*.description' => 'nullable|string',
-            'translations.*.car_type' => 'nullable|string|max:255',
-            'translations.*.transmission' => 'nullable|string|max:255',
-            'translations.*.fuel_type' => 'nullable|string|max:255',
-            'translations.*.features' => 'nullable|string',
-        ]);
+{
+    $validatedData = $request->validate([
+        'brand' => 'required|string|max:255',
+        'car_model' => 'required|string|max:255',
+        'category' => 'required|string|in:regular,exclusive',
+        'capacity' => 'nullable|integer|min:0',
+        'trunk_size' => 'nullable|integer|min:0',
+        'price_per_day' => 'required|numeric|min:0',
+        'status' => 'required|string|in:available,unavailable,maintenance',
+        'translations' => 'required|array',
+        'translations.en' => 'required|array',
+        'translations.*.description' => 'nullable|string',
+        'translations.*.car_type' => 'nullable|string|max:255',
+        'translations.*.transmission' => 'nullable|string|max:255',
+        'translations.*.fuel_type' => 'nullable|string|max:255',
+        'translations.*.features' => 'nullable|string',
+    ]);
 
-        $carRental->update($request->only([
-            'brand',
-            'car_model',
-            'category', // Include in update
-            'capacity',
-            'trunk_size',
-            'price_per_day',
-            'status',
-        ]));
+    // 1. Prepare data for the main table
+    $updateData = $request->only([
+        'brand',
+        'car_model',
+        'category',
+        'capacity',
+        'trunk_size',
+        'price_per_day',
+        'status',
+    ]);
 
-        // Update fallback fields on main table
-        $englishTranslation = $validatedData['translations']['en'];
-        $carRental->description = $englishTranslation['description'];
-        $carRental->car_type = $englishTranslation['car_type'];
-        $carRental->transmission = $englishTranslation['transmission'];
-        $carRental->fuel_type = $englishTranslation['fuel_type'];
-        $carRental->features = !empty($englishTranslation['features']) ? array_map('trim', explode(',', $englishTranslation['features'])) : [];
-        $carRental->save();
-
-        foreach ($validatedData['translations'] as $locale => $data) {
-            $carRental->translations()->updateOrCreate(
-                ['locale' => $locale],
-                [
-                    'description' => $data['description'],
-                    'car_type' => $data['car_type'],
-                    'transmission' => $data['transmission'],
-                    'fuel_type' => $data['fuel_type'],
-                    'features' => !empty($data['features']) ? array_map('trim', explode(',', $data['features'])) : [],
-                ]
-            );
-        }
-
-        return redirect()->route('admin.rentals.show', $carRental->id)
-                         ->with('success', 'Car rental updated successfully.');
+    // 2. ✅ Update slug ONLY if the car_model name has changed
+    // We check this BEFORE the model is updated in the database
+    if ($request->car_model !== $carRental->car_model) {
+        $updateData['slug'] = Str::slug($request->car_model) . '-' . Str::random(5);
     }
+
+    // 3. Perform a single update for main fields and slug
+    $carRental->update($updateData);
+
+    // 4. Update fallback fields on main table (English defaults)
+    $english = $validatedData['translations']['en'];
+    $carRental->description = $english['description'] ?? null;
+    $carRental->car_type = $english['car_type'] ?? null;
+    $carRental->transmission = $english['transmission'] ?? null;
+    $carRental->fuel_type = $english['fuel_type'] ?? null;
+    $carRental->features = !empty($english['features'])
+        ? array_map('trim', explode(',', $english['features']))
+        : [];
+    $carRental->save();
+
+    // 5. Update or create individual translations
+    foreach ($validatedData['translations'] as $locale => $data) {
+        $carRental->translations()->updateOrCreate(
+            ['locale' => $locale],
+            [
+                'description' => $data['description'] ?? null,
+                'car_type' => $data['car_type'] ?? null,
+                'transmission' => $data['transmission'] ?? null,
+                'fuel_type' => $data['fuel_type'] ?? null,
+                'features' => !empty($data['features'])
+                    ? array_map('trim', explode(',', $data['features']))
+                    : [],
+            ]
+        );
+    }
+
+    return redirect()->route('admin.rentals.show', $carRental->id)
+                     ->with('success', 'Car rental updated successfully.');
+}
 
     public function update_availability(Request $request, $id)
     {
