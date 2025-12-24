@@ -3,7 +3,7 @@
 {{-- ================= HEADER (LOGO) ================= --}}
 <x-slot:header>
     <a href="{{ $url ?? config('app.url') }}" style="display:inline-block;">
-        <img src="https://travelmore.travel/images/logo.png"
+        <img src="{{ $message->embed(public_path('images/logo.png')) }}"
              width="180"
              alt="Travelmore Logo"
              style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
