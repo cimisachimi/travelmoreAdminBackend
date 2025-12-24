@@ -19,6 +19,7 @@ class Order extends Model
         'subtotal', // ✅ ADD THIS
         'discount_amount', // ✅ ADD THIS
         'total_amount',
+        'paid_amount', // ✅ TAMBAHKAN INI
         'down_payment_amount',
         'status',
         'payment_deadline',

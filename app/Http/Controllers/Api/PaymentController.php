@@ -171,155 +171,136 @@ class PaymentController extends Controller
      * Handles incoming notifications from Midtrans.
      */
     public function notificationHandler(Request $request)
-    {
-        // Generate signature key to verify the request is authentic
-        $serverKey = config('midtrans.server_key');
-        $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
+{
+    // Verifikasi Signature Key Midtrans
+    $serverKey = config('midtrans.server_key');
+    $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
 
-        if ($hashed !== $request->signature_key) {
-            Log::error('Midtrans Webhook: Invalid Signature Key detected.');
-            return response()->json(['message' => 'Invalid Signature'], 403);
-        }
-        Log::info('Midtrans notification received:', $request->all());
-
-        try {
-            $notification = new Notification();
-
-            $transactionStatus = $notification->transaction_status;
-            $fraudStatus = $notification->fraud_status;
-            $midtransOrderId = $notification->order_id;
-
-            // Extract transaction ID
-            // Format is TRX-{TransactionID}-{Timestamp}
-            $orderIdParts = explode('-', $midtransOrderId);
-            if (count($orderIdParts) < 2 || $orderIdParts[0] !== 'TRX') {
-                Log::warning('Midtrans webhook: Invalid order_id format.', ['order_id' => $midtransOrderId]);
-                return response()->json(['message' => 'Invalid order ID format'], 400);
-            }
-            $transactionId = $orderIdParts[1];
-
-            $transaction = Transaction::findOrFail($transactionId);
-            $transaction->load('order.booking.bookable');
-            $order = $transaction->order;
-
-            if (!$order) {
-                Log::error('Midtrans webhook: Order not found.', ['transaction_id' => $transactionId]);
-                return response()->json(['message' => 'Order association missing'], 200);
-            }
-
-            if (in_array($transaction->status, ['settlement', 'failed', 'expire', 'refund'])) {
-                return response()->json(['message' => 'Transaction already processed.']);
-            }
-
-            // Flag to determine if we need to send an email (default false)
-            $shouldNotifyAdmin = false;
-
-            DB::transaction(function () use ($transaction, $order, $notification, $transactionStatus, $fraudStatus, &$shouldNotifyAdmin) {
-                $transaction->payment_type = $notification->payment_type;
-                $transaction->payment_payloads = json_encode($notification->getResponse());
-
-                $finalTransactionStatus = $transaction->status;
-                $finalOrderStatus = $order->status;
-                $finalBookingStatus = optional($order->booking)->status;
-                $finalBookingPaymentStatus = optional($order->booking)->payment_status;
-
-                $areNotesEqual = (trim($transaction->notes ?? '') === 'down_payment');
-
-                // ✅ SUCCESSFUL PAYMENT
-                if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $fraudStatus == 'accept')) {
-
-                    $finalTransactionStatus = 'settlement';
-                    $isDownPayment = $areNotesEqual;
-
-                    // CHECK FOR NOTIFICATION:
-                    // Only notify if the order wasn't already marked as paid/partial to avoid duplicates
-                    if ($order->status !== 'paid' && $order->status !== 'partially_paid') {
-                        $shouldNotifyAdmin = true;
-                    }
-
-                    if ($isDownPayment && $finalOrderStatus !== 'partially_paid') {
-                        $finalOrderStatus = 'partially_paid';
-                        if ($order->booking) {
-                            $finalBookingStatus = 'confirmed';
-                            $finalBookingPaymentStatus = 'partial';
-                        }
-                    }
-                    else if (!$isDownPayment && $finalOrderStatus !== 'paid') {
-                        $finalOrderStatus = 'paid';
-                        if ($order->booking) {
-                            $finalBookingStatus = 'confirmed';
-                            $finalBookingPaymentStatus = 'paid';
-                        }
-                    }
-
-                // PENDING / FAILED
-                } else if ($transactionStatus == 'pending') {
-                    $finalTransactionStatus = 'pending';
-                    if ($finalOrderStatus === 'pending') {
-                        $finalOrderStatus = 'processing';
-                    }
-                } else if (in_array($transactionStatus, ['deny', 'cancel', 'expire', 'failure'])) {
-                    $finalTransactionStatus = 'failed';
-                    if ($finalOrderStatus !== 'partially_paid' && $finalOrderStatus !== 'paid') {
-                        $finalOrderStatus = 'failed';
-                        if ($order->booking) {
-                            $finalBookingStatus = 'cancelled';
-                            $finalBookingPaymentStatus = 'unpaid';
-                        }
-                        $this->releaseAvailability($order);
-                    }
-                }
-
-                $transaction->status = $finalTransactionStatus;
-                $order->status = $finalOrderStatus;
-                if ($order->booking) {
-                    if ($finalBookingStatus !== $order->booking->status) $order->booking->status = $finalBookingStatus;
-                    if ($finalBookingPaymentStatus !== $order->booking->payment_status) $order->booking->payment_status = $finalBookingPaymentStatus;
-                }
-
-                $transaction->save();
-                $order->save();
-                if ($order->booking && $order->booking->isDirty()) {
-                    $order->booking->save();
-                }
-                // ✅ ADD THIS BLOCK HERE
-                // If the payment is successful (Full Payment), update the TripPlanner workflow
-                if ($order->status === 'paid' || $order->status === 'confirmed') {
-                    // Check if this booking is for a Trip Planner
-                    if ($order->booking && $order->booking->bookable instanceof TripPlanner) {
-                        $order->booking->bookable->update([
-                            'status' => 'Waiting to Start', // Move to the "Craft" stage for Admin
-                            'payment_status' => 'Paid'
-                        ]);
-                    }
-                }
-            });
-
-            // ✅ SEND EMAIL NOTIFICATION
-            if ($shouldNotifyAdmin) {
-                try {
-                    $admins = User::where('role', User::ROLE_ADMIN)->get();
-
-                    if ($admins->count() > 0) {
-                        LaravelNotification::send($admins, new NewOrderAdminNotification($order));
-                        Log::info('Admin notification email queued for Order #' . $order->order_number);
-                    }
-                    // ✅ ADD THIS: Customer Receipt Notification
-                    $order->user->notify(new \App\Notifications\OrderReceiptNotification($order));
-                    Log::info('Customer receipt email queued for Order #' . $order->order_number);
-
-                } catch (\Exception $e) {
-                    Log::error('Failed to send admin notification: ' . $e->getMessage());
-                }
-            }
-
-            return response()->json(['message' => 'Notification handled successfully.'], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Midtrans handler failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Internal error'], 500);
-        }
+    if ($hashed !== $request->signature_key) {
+        Log::error('Midtrans Webhook: Invalid Signature Key detected.');
+        return response()->json(['message' => 'Invalid Signature'], 403);
     }
+
+    try {
+        $notification = new Notification();
+        $transactionStatus = $notification->transaction_status;
+        $fraudStatus = $notification->fraud_status;
+        $midtransOrderId = $notification->order_id;
+
+        // Ekstrak ID Transaksi dari format TRX-{ID}-{Timestamp}
+        $orderIdParts = explode('-', $midtransOrderId);
+        $transactionId = $orderIdParts[1];
+
+        $transaction = Transaction::findOrFail($transactionId);
+        $transaction->load('order.booking.bookable');
+        $order = $transaction->order;
+
+        if (!$order) {
+            return response()->json(['message' => 'Order association missing'], 200);
+        }
+
+        // Jangan proses ulang jika status sudah final
+        if (in_array($transaction->status, ['settlement', 'failed', 'expire', 'refund'])) {
+            return response()->json(['message' => 'Transaction already processed.']);
+        }
+
+        $shouldNotifyAdmin = false;
+
+        DB::transaction(function () use ($transaction, $order, $notification, $transactionStatus, $fraudStatus, &$shouldNotifyAdmin) {
+            $transaction->payment_type = $notification->payment_type;
+            $transaction->payment_payloads = json_encode($notification->getResponse());
+
+            $finalOrderStatus = $order->status;
+            $finalBookingStatus = optional($order->booking)->status;
+            $finalBookingPaymentStatus = optional($order->booking)->payment_status;
+
+            $isDownPayment = (trim($transaction->notes ?? '') === 'down_payment');
+
+            // ✅ LOGIKA PEMBAYARAN BERHASIL
+            if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $fraudStatus == 'accept')) {
+
+                $transaction->status = 'settlement';
+
+                // Simpan akumulasi jumlah yang dibayar ke database agar muncul di resi
+                $order->paid_amount += $transaction->gross_amount;
+
+                // Tentukan notifikasi admin hanya untuk pembayaran pertama (DP atau Full)
+                if ($order->status !== 'paid' && $order->status !== 'partially_paid') {
+                    $shouldNotifyAdmin = true;
+                }
+
+                if ($isDownPayment && $finalOrderStatus !== 'partially_paid') {
+                    $finalOrderStatus = 'partially_paid';
+                    if ($order->booking) {
+                        $finalBookingStatus = 'confirmed';
+                        $finalBookingPaymentStatus = 'partial';
+                    }
+                } else if (!$isDownPayment && $finalOrderStatus !== 'paid') {
+                    $finalOrderStatus = 'paid';
+                    if ($order->booking) {
+                        $finalBookingStatus = 'confirmed';
+                        $finalBookingPaymentStatus = 'paid';
+                    }
+                }
+
+            // LOGIKA PENDING / GAGAL
+            } else if ($transactionStatus == 'pending') {
+                $transaction->status = 'pending';
+                if ($finalOrderStatus === 'pending') $finalOrderStatus = 'processing';
+
+            } else if (in_array($transactionStatus, ['deny', 'cancel', 'expire', 'failure'])) {
+                $transaction->status = 'failed';
+                if ($finalOrderStatus !== 'partially_paid' && $finalOrderStatus !== 'paid') {
+                    $finalOrderStatus = 'failed';
+                    if ($order->booking) {
+                        $finalBookingStatus = 'cancelled';
+                        $finalBookingPaymentStatus = 'unpaid';
+                    }
+                    $this->releaseAvailability($order);
+                }
+            }
+
+            // Simpan perubahan ke database
+            $order->status = $finalOrderStatus;
+            if ($order->booking) {
+                $order->booking->status = $finalBookingStatus;
+                $order->booking->payment_status = $finalBookingPaymentStatus;
+                $order->booking->save();
+            }
+
+            $transaction->save();
+            $order->save();
+
+            // Update workflow TripPlanner jika perlu
+            if ($order->status === 'paid' && $order->booking && $order->booking->bookable instanceof \App\Models\TripPlanner) {
+                $order->booking->bookable->update(['status' => 'Waiting to Start', 'payment_status' => 'Paid']);
+            }
+        });
+
+        // ✅ KIRIM NOTIFIKASI EMAIL
+        if ($shouldNotifyAdmin) {
+            try {
+                $admins = User::where('role', User::ROLE_ADMIN)->get();
+                if ($admins->count() > 0) {
+                    LaravelNotification::send($admins, new \App\Notifications\NewOrderAdminNotification($order));
+                }
+
+                // Kirim Resi ke Customer (paid_amount sekarang sudah terisi)
+                $order->user->notify(new \App\Notifications\OrderReceiptNotification($order));
+                Log::info('Email resi berhasil dikirim untuk Order #' . $order->order_number);
+
+            } catch (\Exception $e) {
+                Log::error('Gagal mengirim email: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['message' => 'Notification handled successfully.'], 200);
+
+    } catch (\Exception $e) {
+        Log::error('Midtrans handler failed: ' . $e->getMessage());
+        return response()->json(['message' => 'Internal error'], 500);
+    }
+}
 
     protected function releaseAvailability(Order $order)
     {
