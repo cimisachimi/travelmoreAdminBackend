@@ -22,11 +22,20 @@ use App\Models\User;
 use App\Models\HolidayPackage;
 use App\Models\Booking;
 use App\Models\TripPlanner;
-
+use App\Notifications\OrderReceiptNotification;
+use App\Models\Order;
 Route::get('/', function () {
     return redirect()->route('login');
 });
+Route::get('/test-mail', function() {
+    // 1. Get an order that actually has a user and booking to avoid "null" errors
+    $order = Order::with(['user', 'booking'])->latest()->first();
 
+    if (!$order) return "No orders found in database to test.";
+
+    // 2. Return the mail representation to the browser
+    return (new OrderReceiptNotification($order))->toMail($order->user);
+});
 // FIX: Changed this to use DashboardController so it returns the correct stats (Revenue, Orders, etc.)
 // instead of the incompatible user/package counts.
 Route::get('/dashboard', DashboardController::class)
@@ -40,7 +49,11 @@ Route::middleware('auth')->group(function () {
 
     // --- ADMIN ROUTES ---
     Route::prefix('admin')->middleware('admin')->name('admin.')->group(function () {
-        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        // Inside Route::prefix('admin')->middleware('admin')->name('admin.')->group...
+Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
 
         // --- Holiday Packages ---
         Route::post('/holiday-packages/{package}/images', [AdminHolidayPackageController::class, 'storeImage'])->name('packages.images.store');
