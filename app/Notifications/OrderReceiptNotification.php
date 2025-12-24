@@ -37,18 +37,39 @@ class OrderReceiptNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
-        $amount = number_format($this->order->total_amount, 0, ',', '.');
+        // Logic for Down Payment (DP) and Remaining Balance
+        $totalAmount = $this->order->total_amount; // Total price of the service
+        $paidNow = $this->order->paid_amount;     // Current payment amount (the DP)
+        $remainingBalance = $totalAmount - $paidNow;
+
+        // Formatting currency for the receipt
+        $totalFormatted = number_format($totalAmount, 0, ',', '.');
+        $paidFormatted = number_format($paidNow, 0, ',', '.');
+        $remainingFormatted = number_format($remainingBalance, 0, ',', '.');
+
         $booking = $this->order->booking;
 
         $mail = (new MailMessage)
-            ->subject('Receipt for Your Order #' . $this->order->order_number)
+            ->subject('Receipt: Payment for Order #' . $this->order->order_number)
             ->greeting('Thank you for choosing Travelmore.travel, ' . $this->order->user->name . '!')
-
-
             ->line('Your payment has been successfully processed.')
-            ->line('**Order Number:** ' . $this->order->order_number)
-            ->line('**Total Amount:** Rp ' . $amount)
             ->line('---');
+
+        // Payment Summary Section
+        $mail->line('### Payment Summary')
+            ->line('**Order Number:** ' . $this->order->order_number)
+            ->line('**Total Trip Price:** Rp ' . $totalFormatted)
+            ->line('**Amount Paid Now:** Rp ' . $paidFormatted);
+
+        // Conditional display based on balance
+        if ($remainingBalance > 0) {
+            $mail->line('**Remaining Balance:** Rp ' . $remainingFormatted)
+                ->line('⚠️ *Please ensure the remaining balance is settled before the departure date.*');
+        } else {
+            $mail->line('✅ **Payment Status:** Paid in Full');
+        }
+
+        $mail->line('---');
 
         // 1. Add Service-Specific details from the Booking
         if ($booking) {
