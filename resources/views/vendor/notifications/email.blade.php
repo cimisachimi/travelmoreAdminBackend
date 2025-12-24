@@ -1,5 +1,16 @@
 <x-mail::message>
-{{-- Greeting --}}
+
+{{-- ================= HEADER (LOGO) ================= --}}
+<x-slot:header>
+    <a href="{{ $url ?? config('app.url') }}" style="display:inline-block;">
+        <img src="https://travelmore.travel/images/logo.png"
+             width="180"
+             alt="Travelmore Logo"
+             style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
+    </a>
+</x-slot:header>
+
+{{-- ================= GREETING ================= --}}
 @if (! empty($greeting))
 # {{ $greeting }}
 @else
@@ -10,32 +21,33 @@
 @endif
 @endif
 
-{{-- Intro Lines --}}
+{{-- ================= INTRO LINES ================= --}}
 @foreach ($introLines as $line)
 {{ $line }}
 
 @endforeach
 
-{{-- Action Button --}}
+{{-- ================= ACTION BUTTON ================= --}}
 @isset($actionText)
-<?php
+@php
     $color = match ($level) {
         'success', 'error' => $level,
         default => 'primary',
     };
-?>
+@endphp
+
 <x-mail::button :url="$actionUrl" :color="$color">
 {{ $actionText }}
 </x-mail::button>
 @endisset
 
-{{-- Outro Lines --}}
+{{-- ================= OUTRO LINES ================= --}}
 @foreach ($outroLines as $line)
 {{ $line }}
 
 @endforeach
 
-{{-- Salutation --}}
+{{-- ================= SALUTATION ================= --}}
 @if (! empty($salutation))
 {{ $salutation }}
 @else
@@ -43,16 +55,17 @@
 {{ config('app.name') }}
 @endif
 
-{{-- Subcopy --}}
+{{-- ================= SUBCOPY ================= --}}
 @isset($actionText)
 <x-slot:subcopy>
 @lang(
     "If you're having trouble clicking the \":actionText\" button, copy and paste the URL below\n".
     'into your web browser:',
-    [
-        'actionText' => $actionText,
-    ]
-) <span class="break-all">[{{ $displayableActionUrl }}]({{ $actionUrl }})</span>
+    ['actionText' => $actionText]
+)
+<br>
+<a href="{{ $actionUrl }}">{{ $displayableActionUrl }}</a>
 </x-slot:subcopy>
 @endisset
+
 </x-mail::message>
