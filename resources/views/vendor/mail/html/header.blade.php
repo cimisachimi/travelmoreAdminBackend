@@ -1,15 +1,15 @@
 @props(['url'])
 <tr>
-<td class="header">
+<td class="header" style="padding: 40px 0; text-align: center;">
 <a href="{{ $url }}" style="display: inline-block;">
-    {{-- Using a direct URL instead of $message->embed avoids attachments entirely --}}
     @if (file_exists(public_path('images/logo.png')))
+        {{-- Increased width to 250 for a bigger logo --}}
         <img src="{{ config('app.url') }}/images/logo.png"
-             width="180"
+             width="250"
              alt="{{ config('app.name') }}"
-             style="display: block; border: 0;">
+             style="display: block; border: 0; width: 250px; height: auto;">
     @else
-        {{ config('app.name') }}
+        <span style="font-size: 24px; font-weight: bold; color: #3d4852;">{{ config('app.name') }}</span>
     @endif
 </a>
 </td>

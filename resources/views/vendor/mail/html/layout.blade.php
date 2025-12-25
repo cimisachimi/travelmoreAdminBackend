@@ -39,10 +39,9 @@ width: 100% !important;
 <table class="inner-body" align="center" width="570" cellpadding="0" cellspacing="0" role="presentation">
 <!-- Body content -->
 <tr>
-<td class="content-cell">
-{!! Illuminate\Mail\Markdown::parse($slot) !!}
-
-{!! $subcopy ?? '' !!}
+<td class="content-cell" style="padding: 32px;"> {{-- Add explicit padding here if it's missing --}}
+    {!! Illuminate\Mail\Markdown::parse($slot) !!}
+    {!! $subcopy ?? '' !!}
 </td>
 </tr>
 </table>
