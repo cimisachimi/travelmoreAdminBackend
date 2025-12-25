@@ -1,22 +1,21 @@
+<x-mail::message>
+{{-- Header logo is now handled globally by your mail components --}}
 
-{{-- ================= GREETING ================= --}}
+{{-- Greeting --}}
 @if (! empty($greeting))
 # {{ $greeting }}
-@else
-@if ($level === 'error')
+@elseif ($level === 'error')
 # @lang('Whoops!')
 @else
 # @lang('Hello!')
 @endif
-@endif
 
-{{-- ================= INTRO LINES ================= --}}
+{{-- Intro Lines --}}
 @foreach ($introLines as $line)
 {{ $line }}
-
 @endforeach
 
-{{-- ================= ACTION BUTTON ================= --}}
+{{-- Action Button --}}
 @isset($actionText)
 @php
     $color = match ($level) {
@@ -24,19 +23,17 @@
         default => 'primary',
     };
 @endphp
-
 <x-mail::button :url="$actionUrl" :color="$color">
 {{ $actionText }}
 </x-mail::button>
 @endisset
 
-{{-- ================= OUTRO LINES ================= --}}
+{{-- Outro Lines --}}
 @foreach ($outroLines as $line)
 {{ $line }}
-
 @endforeach
 
-{{-- ================= SALUTATION ================= --}}
+{{-- Salutation --}}
 @if (! empty($salutation))
 {{ $salutation }}
 @else
@@ -44,7 +41,7 @@
 {{ config('app.name') }}
 @endif
 
-{{-- ================= SUBCOPY ================= --}}
+{{-- Subcopy --}}
 @isset($actionText)
 <x-slot:subcopy>
 @lang(
@@ -56,5 +53,4 @@
 <a href="{{ $actionUrl }}">{{ $displayableActionUrl }}</a>
 </x-slot:subcopy>
 @endisset
-
 </x-mail::message>
