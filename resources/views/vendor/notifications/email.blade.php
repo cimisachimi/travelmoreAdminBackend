@@ -1,15 +1,3 @@
-<x-mail::message>
-
-{{-- ================= HEADER (LOGO) ================= --}}
-<x-slot:header>
-    <a href="{{ $url ?? config('app.url') }}" style="display:inline-block;">
-        <img src="{{asset('images/logo.png')}}"
-         width="180"
-         alt="Travelmore Logo"
-         style="width: 180px; display: block; margin: 0 auto;">
-    </a>
-
-</x-slot:header>
 
 {{-- ================= GREETING ================= --}}
 @if (! empty($greeting))
