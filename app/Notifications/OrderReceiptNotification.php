@@ -28,12 +28,21 @@ class OrderReceiptNotification extends Notification implements ShouldQueue
         return ['mail'];
     }
 
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('Travelmore Receipt - Order #' . $this->order->order_number)
-            ->view('emails.order-receipt', [
-                'order' => $this->order,
-            ]);
-    }
+   public function toMail(object $notifiable): \Illuminate\Notifications\Messages\MailMessage
+{
+    $order = $this->order;
+
+    // Prepare WhatsApp Correction Link
+    $companyWa = '628123456789'; // TODO: Replace with your active company WhatsApp
+    $waText = "Hi Travelmore, I am confirming Order #{$order->order_number} for {$order->user->name}. My WhatsApp number needs to be updated. Please help!";
+    $waUrl = "https://wa.me/{$companyWa}?text=" . urlencode($waText);
+
+    return (new \Illuminate\Notifications\Messages\MailMessage)
+        ->subject('Travelmore Trip Confirmation - Order #' . $order->order_number)
+        ->markdown('emails.order-receipt', [
+            'order' => $order,
+            'booking' => $order->booking,
+            'waUrl' => $waUrl,
+        ]);
+}
 }
