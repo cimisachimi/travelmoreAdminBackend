@@ -3,10 +3,16 @@
 namespace App\Notifications;
 
 use App\Models\Order;
+use App\Models\CarRental;
+use App\Models\HolidayPackage;
+use App\Models\OpenTrip;
+use App\Models\Activity;
+use App\Models\TripPlanner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Str;
 
 class OrderReceiptNotification extends Notification implements ShouldQueue
 {
@@ -28,21 +34,33 @@ class OrderReceiptNotification extends Notification implements ShouldQueue
         return ['mail'];
     }
 
-   public function toMail(object $notifiable): \Illuminate\Notifications\Messages\MailMessage
-{
-    $order = $this->order;
+    public function toMail(object $notifiable): MailMessage
+    {
+        $order = $this->order;
+        $booking = $order->booking;
+        $bookable = $booking->bookable;
 
-    // Prepare WhatsApp Correction Link
-    $companyWa = '628123456789'; // TODO: Replace with your active company WhatsApp
-    $waText = "Hi Travelmore, I am confirming Order #{$order->order_number} for {$order->user->name}. My WhatsApp number needs to be updated. Please help!";
-    $waUrl = "https://wa.me/{$companyWa}?text=" . urlencode($waText);
+        // 1. Determine the view based on the class name of the bookable model
+        $serviceType = Str::kebab(class_basename($bookable)); // results in 'car-rental', 'holiday-package', etc.
+        $viewPath = "emails.orders.{$serviceType}";
 
-    return (new \Illuminate\Notifications\Messages\MailMessage)
-        ->subject('Travelmore Trip Confirmation - Order #' . $order->order_number)
-        ->markdown('emails.order-receipt', [
-            'order' => $order,
-            'booking' => $order->booking,
-            'waUrl' => $waUrl,
-        ]);
-}
+        // Fallback if a specific template doesn't exist
+        if (!view()->exists($viewPath)) {
+            $viewPath = 'emails.order-receipt';
+        }
+
+        // 2. Prepare WhatsApp Link
+        $companyWa = '628123456789';
+        $waText = "Hi Travelmore, I am confirming Order #{$order->order_number} for {$order->user->name}. My WhatsApp number needs to be updated. Please help!";
+        $waUrl = "https://wa.me/{$companyWa}?text=" . urlencode($waText);
+
+        return (new MailMessage)
+            ->subject('Travelmore ' . Str::headline($serviceType) . ' Confirmation - Order #' . $order->order_number)
+            ->markdown($viewPath, [
+                'order' => $order,
+                'booking' => $booking,
+                'bookable' => $bookable,
+                'waUrl' => $waUrl,
+            ]);
+    }
 }

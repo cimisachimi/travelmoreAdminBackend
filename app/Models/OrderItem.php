@@ -11,6 +11,7 @@ class OrderItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'name',     // ✅ ADD THIS: Required to save service and addon names
         'order_id',
         'orderable_id',
         'orderable_type',
