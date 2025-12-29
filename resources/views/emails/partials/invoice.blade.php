@@ -54,215 +54,187 @@
         $statusColor = "#64748b";
     }
 
-    // --- 5. ADDONS LIST FOR PRICE MATCHING ---
     $addonsList = $details['selected_addons'] ?? $details['addons'] ?? [];
 @endphp
 
-<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; font-family:Arial, sans-serif; margin: 0 auto;">
-    {{-- HEADER --}}
+{{-- MAIN CONTAINER: WIDER 850px FOR MEDIUM VIEW --}}
+<table width="850" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; font-family:Arial, sans-serif; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+
+    {{-- DYNAMIC HEADER --}}
     <tr>
-        <td style="background-color:#1e293b; padding:20px;">
+        <td style="background-color:#1e293b; padding:30px 40px;">
             <table width="100%">
                 <tr>
-                    <td style="font-size:18px; font-weight:bold; color:#ffffff; text-transform:uppercase;">
-                        @if($bookable instanceof TripPlanner) Request Confirmation
+                    <td style="font-size:22px; font-weight:bold; color:#ffffff; text-transform:uppercase; letter-spacing: -0.5px;">
+                        @if($bookable instanceof TripPlanner) Trip Request Confirmation
                         @elseif($bookable instanceof Activity) Activity Confirmation
                         @elseif($bookable instanceof HolidayPackage) Holiday Confirmation
                         @elseif($bookable instanceof OpenTrip) Open Trip Confirmation
                         @elseif($bookable instanceof CarRental) Rental Confirmation
-                        @else Trip Confirmation @endif
+                        @else Booking Confirmation @endif
                     </td>
-                    <td align="right" style="color:#cbd5e1; font-size:12px;">ID: #{{ $order->order_number }}</td>
+                    <td align="right" style="color:#94a3b8; font-size:13px; font-family: monospace;">ID: #{{ $order->order_number }}</td>
                 </tr>
             </table>
         </td>
     </tr>
 
-    {{-- SUMMARY BAR --}}
-    <tr style="background-color:#f1f5f9;">
-        <td style="padding:15px 25px; border-bottom:1px solid #e2e8f0;">
+    {{-- STATS SUMMARY BAR --}}
+    <tr style="background-color:#f8fafc; border-bottom:1px solid #e2e8f0;">
+        <td style="padding:20px 40px;">
             <table width="100%">
                 <tr>
-                    <td width="33%">
-                        <p style="margin:0; font-size:10px; color:#64748b; text-transform:uppercase;">Total Guests</p>
-                        <p style="margin:2px 0 0; font-weight:bold; color:#1e293b;">{{ $totalPaxCount }} Pax</p>
+                    <td width="33%" style="border-right: 1px solid #e2e8f0;">
+                        <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">Total Guests</p>
+                        <p style="margin:4px 0 0; font-size:18px; font-weight:bold; color:#1e293b;">{{ $totalPaxCount }} Pax</p>
                     </td>
-                    <td width="33%" align="center">
-                        <p style="margin:0; font-size:10px; color:#64748b; text-transform:uppercase;">
+                    <td width="33%" align="center" style="border-right: 1px solid #e2e8f0;">
+                        <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">
                             {{ $bookable instanceof CarRental ? 'Pickup Date' : 'Travel Date' }}
                         </p>
-                        <p style="margin:2px 0 0; font-weight:bold; color:#1e293b;">{{ $dateStr }}</p>
+                        <p style="margin:4px 0 0; font-size:18px; font-weight:bold; color:#1e293b;">{{ $dateStr }}</p>
                     </td>
                     <td width="33%" align="right">
-                        <p style="margin:0; font-size:10px; color:#64748b; text-transform:uppercase;">Status</p>
-                        <p style="margin:2px 0 0; font-weight:bold; color:{{ $statusColor }};">{{ $statusLabel }}</p>
+                        <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">Payment Status</p>
+                        <p style="margin:4px 0 0; font-size:18px; font-weight:bold; color:{{ $statusColor }};">{{ $statusLabel }}</p>
                     </td>
                 </tr>
             </table>
         </td>
     </tr>
 
-    {{-- BODY CONTENT --}}
+    {{-- DUAL COLUMN BODY --}}
     <tr>
-        <td style="padding:25px;">
-            {{-- CONTACT & LOCATION GRID --}}
-            <table width="100%" style="margin-bottom:25px; background-color:#f8fafc; border-radius:6px; padding:15px;">
+        <td style="padding:40px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                    <td width="45%" valign="top">
-                        <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">Primary Contact</p>
-                        <p style="margin:5px 0 0; font-weight:bold; color:#1e293b; font-size:14px;">{{ $order->user->name }}</p>
-                        <p style="margin:2px 0 0; color:#2563eb; font-size:13px; font-weight:bold;">📞 {{ $phone }}</p>
-                    </td>
-                    <td width="55%" align="right" valign="top">
-                        <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">
-                            @if($bookable instanceof TripPlanner) Destination Area
-                            @elseif($bookable instanceof OpenTrip) Trip Logistics
-                            @elseif($bookable instanceof Activity) Activity Schedule
-                            @elseif($bookable instanceof CarRental) Rental Schedule
-                            @else Travel Schedule @endif
-                        </p>
-                        <div style="font-size:12px; color:#1e293b; line-height:1.6; margin-top:5px;">
-                            @if($bookable instanceof TripPlanner)
-                                📍 {{ ($bookable->city ? $bookable->city . ', ' : '') . ($bookable->province ?? 'Custom Location') }}<br>
-                                📅 Departure: {{ $dateStr }}
-                            @elseif($bookable instanceof Activity)
-                                <strong>Date:</strong> {{ $dateStr }}<br>
-                                <strong>Preferred Time:</strong> {{ $details['activity_time'] ?? 'Flexible' }}<br>
-                                <strong>Pickup Point:</strong> {{ $meetingPoint }}
-                            @elseif($bookable instanceof OpenTrip)
-                                <strong>Trip Date:</strong> {{ $dateStr }}<br>
-                                <strong>Meeting Point:</strong> {{ $meetingPoint }}<br>
-                                <strong>Duration:</strong> {{ $duration }} Days
-                            @elseif($bookable instanceof CarRental)
-                                <strong>Pickup:</strong> {{ $dateStr }} ({{ $details['pickup_time'] ?? 'TBA' }})<br>
-                                <strong>Pickup Point:</strong> {{ $meetingPoint }}<br>
-                                <strong>Drop-off Point:</strong> {{ $dropoffLocation }}
-                            @else
-                                <strong>Trip Start Date:</strong> {{ $dateStr }}<br>
-                                <strong>Pickup Point:</strong> {{ $meetingPoint }}<br>
-                                <strong>Flight Num:</strong> {{ $flightNum }}<br>
-                                <strong>Duration:</strong> {{ $duration }} Days
-                            @endif
+                    {{-- COLUMN 1: CONTACT --}}
+                    <td width="48%" valign="top" style="padding-right:20px;">
+                        <h4 style="margin:0 0 15px; font-size:12px; color:#94a3b8; text-transform:uppercase; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">Primary Contact</h4>
+                        <p style="margin:0; font-weight:bold; color:#1e293b; font-size:18px;">{{ $order->user->name }}</p>
+                        <p style="margin:8px 0 0; color:#2563eb; font-size:15px; font-weight:bold;">📞 {{ $phone }}</p>
+
+                        <div style="margin-top:25px; padding:20px; background:#f8fafc; border-radius:10px; border:1px solid #f1f5f9;">
+                            <p style="margin:0 0- 10px; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">Details & Preferences:</p>
+                            <table width="100%" style="font-size:13px; color:#475569; line-height: 2;">
+                                @if($bookable instanceof TripPlanner)
+                                    <tr><td><strong>Style:</strong></td><td align="right">{{ is_array($bookable->travel_style) ? implode(', ', $bookable->travel_style) : $bookable->travel_style }}</td></tr>
+                                    <tr><td><strong>Budget:</strong></td><td align="right">{{ $bookable->budget_pack }}</td></tr>
+                                @elseif($bookable instanceof HolidayPackage || $bookable instanceof OpenTrip)
+                                    <tr><td><strong>Room:</strong></td><td align="right">{{ $details['room_type'] ?? 'Standard' }}</td></tr>
+                                    <tr><td><strong>Dietary:</strong></td><td align="right">{{ $details['dietary'] ?? 'None' }}</td></tr>
+                                @elseif($bookable instanceof CarRental)
+                                    <tr><td><strong>Vehicle:</strong></td><td align="right">{{ $bookable->brand }} {{ $bookable->car_model }}</td></tr>
+                                    <tr><td><strong>Type:</strong></td><td align="right">Private Charter</td></tr>
+                                @endif
+                                @if(!empty($details['special_request']))
+                                    <tr><td colspan="2" style="border-top:1px dashed #cbd5e1; padding-top:5px; margin-top:5px; font-style:italic;">"{{ $details['special_request'] }}"</td></tr>
+                                @endif
+                            </table>
                         </div>
                     </td>
-                </tr>
 
-                {{-- DYNAMIC PREFERENCES --}}
-                <tr>
-                    <td colspan="2" style="padding-top:15px; border-top:1px solid #e2e8f0; margin-top:10px;">
-                        <p style="margin:0 0 8px; font-size:11px; color:#64748b; text-transform:uppercase; font-weight:bold;">Details & Preferences:</p>
-                        <table width="100%" style="font-size:12px; color:#475569;">
+                    {{-- COLUMN 2: LOGISTICS --}}
+                    <td width="4%" style="border-left: 1px solid #f1f5f9;">&nbsp;</td>
+                    <td width="48%" valign="top" style="padding-left:10px;">
+                        <h4 style="margin:0 0 15px; font-size:12px; color:#94a3b8; text-transform:uppercase; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">
+                            @if($bookable instanceof CarRental) Rental Schedule @else Trip Logistics @endif
+                        </h4>
+                        <table width="100%" style="font-size:14px; color:#1e293b; line-height: 2;">
                             @if($bookable instanceof TripPlanner)
-                                <tr><td><strong>Travel Style:</strong></td><td align="right">{{ is_array($bookable->travel_style) ? implode(', ', $bookable->travel_style) : $bookable->travel_style }}</td></tr>
-                                <tr><td><strong>Budget Tier:</strong></td><td align="right">{{ $bookable->budget_pack }}</td></tr>
-                                <tr><td><strong>Trip Duration:</strong></td><td align="right">{{ $bookable->duration }} Days</td></tr>
-                            @elseif($bookable instanceof Activity)
-                                <tr><td><strong>Nationality:</strong></td><td align="right">{{ $details['participant_nationality'] ?? 'Not Specified' }}</td></tr>
-                                <tr><td><strong>Activity Time:</strong></td><td align="right">{{ $details['activity_time'] ?? 'Flexible' }}</td></tr>
-                            @elseif($bookable instanceof HolidayPackage || $bookable instanceof OpenTrip)
-                                <tr><td><strong>Room Preference:</strong></td><td align="right">{{ $details['room_type'] ?? 'Standard' }}</td></tr>
-                                <tr><td><strong>Dietary Requirements:</strong></td><td align="right">{{ $details['dietary'] ?? 'None' }}</td></tr>
+                                <tr><td width="35%" style="color:#64748b;">📍 Destination:</td><td style="font-weight:bold;">{{ $bookable->city ?? 'Custom' }}</td></tr>
+                                <tr><td style="color:#64748b;">📅 Departure:</td><td style="font-weight:bold;">{{ $dateStr }}</td></tr>
+                                <tr><td style="color:#64748b;">⏳ Duration:</td><td style="font-weight:bold;">{{ $bookable->duration }} Days</td></tr>
                             @elseif($bookable instanceof CarRental)
-                                <tr><td><strong>Vehicle Selected:</strong></td><td align="right">{{ $bookable->brand }} {{ $bookable->car_model }}</td></tr>
-                                <tr><td><strong>Rental Duration:</strong></td><td align="right">{{ $duration }} Days</td></tr>
-                                <tr><td><strong>Service Type:</strong></td><td align="right">Private Charter (Driver Included)</td></tr>
+                                <tr><td width="35%" style="color:#64748b;">🕒 Pickup Time:</td><td style="font-weight:bold;">{{ $details['pickup_time'] ?? 'TBA' }}</td></tr>
+                                <tr><td style="color:#64748b;">📍 Pickup:</td><td style="font-weight:bold;">{{ $meetingPoint }}</td></tr>
+                                <tr><td style="color:#64748b;">🏁 Drop-off:</td><td style="font-weight:bold;">{{ $dropoffLocation }}</td></tr>
+                            @else
+                                <tr><td width="35%" style="color:#64748b;">📅 Trip Date:</td><td style="font-weight:bold;">{{ $dateStr }}</td></tr>
+                                <tr><td style="color:#64748b;">📍 Meeting:</td><td style="font-weight:bold;">{{ $meetingPoint }}</td></tr>
+                                <tr><td style="color:#64748b;">⏳ Duration:</td><td style="font-weight:bold;">{{ $duration }} Days</td></tr>
                             @endif
                         </table>
                     </td>
                 </tr>
             </table>
 
-            {{-- INVOICE ITEMS --}}
-            <table width="100%" cellpadding="12" cellspacing="0" style="border-collapse:collapse; margin-bottom:20px; border:1px solid #f1f5f9;">
-                <thead>
-                    <tr style="background:#f8fafc;">
-                        <th align="left" style="font-size:11px; color:#475569; text-transform:uppercase;">Service / Add-on</th>
-                        <th align="center" style="font-size:11px; color:#475569; text-transform:uppercase;">Qty</th>
-                        <th align="right" style="font-size:11px; color:#475569; text-transform:uppercase;">Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($order->orderItems as $item)
-                    @php
-                        $displayName = null;
-                        if (is_array($addonsList)) {
-                            foreach ($addonsList as $addon) {
-                                if (is_array($addon) && isset($addon['price']) && abs((float)$addon['price'] - (float)$item->price) < 1) {
-                                    $displayName = "Add-on: " . ($addon['name'] ?? $addon['title'] ?? 'Extra Service');
-                                    break;
+            {{-- INVOICE ITEMS TABLE --}}
+            <div style="margin-top:40px;">
+                <h4 style="margin:0 0 15px; font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Order Breakdown</h4>
+                <table width="100%" cellpadding="15" cellspacing="0" style="border:1px solid #f1f5f9; border-collapse:collapse; border-radius:12px;">
+                    <thead>
+                        <tr style="background:#f8fafc;">
+                            <th align="left" style="font-size:11px; color:#64748b; text-transform:uppercase;">Description</th>
+                            <th align="center" style="font-size:11px; color:#64748b; text-transform:uppercase;">Qty</th>
+                            <th align="right" style="font-size:11px; color:#64748b; text-transform:uppercase;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($order->orderItems as $item)
+                        @php
+                            $displayName = null;
+                            if (is_array($addonsList)) {
+                                foreach ($addonsList as $addon) {
+                                    if (is_array($addon) && isset($addon['price']) && abs((float)$addon['price'] - (float)$item->price) < 1) {
+                                        $displayName = "Add-on: " . ($addon['name'] ?? $addon['title'] ?? 'Extra Service');
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        if (!$displayName) {
-                            $displayName = $item->name
-                                           ?? $item->orderable->name
-                                           ?? $item->orderable->title
-                                           ?? $details['service_name']
-                                           ?? (isset($details['brand']) ? $details['brand'].' '.$details['car_model'] : null)
-                                           ?? "Service Item";
-                        }
-                    @endphp
-                    <tr>
-                        <td style="border-bottom:1px solid #f1f5f9;">
-                            <div style="font-size:14px; font-weight:bold; color:#334155;">{{ $displayName }}</div>
-                        </td>
-                        <td align="center" style="border-bottom:1px solid #f1f5f9;">{{ $item->quantity }}</td>
-                        <td align="right" style="border-bottom:1px solid #f1f5f9; font-weight:bold;">Rp {{ number_format($item->price, 0, ',', '.') }}</td>
-                    </tr>
-                    @endforeach
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="2" align="right" style="padding:15px 12px 5px; font-size:13px; color:#64748b;">Grand Total:</td>
-                        <td align="right" style="padding:15px 12px 5px; font-size:16px; font-weight:bold; color:#1e293b;">Rp {{ number_format($totalAmount, 0, ',', '.') }}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" align="right" style="padding:0 12px 5px; font-size:13px; color:#16a34a;">Amount Paid:</td>
-                        <td align="right" style="padding:0 12px 5px; font-size:16px; font-weight:bold; color:#16a34a;">Rp {{ number_format($paidAmount, 0, ',', '.') }}</td>
-                    </tr>
-                    @if($isPartial && !$isFailed)
-                    <tr>
-                        <td colspan="2" align="right" style="padding:0 12px 15px; font-size:13px; color:#f59e0b;">Balance Due:</td>
-                        <td align="right" style="padding:0 12px 15px; font-size:16px; font-weight:bold; color:#f59e0b;">Rp {{ number_format($totalAmount - $paidAmount, 0, ',', '.') }}</td>
-                    </tr>
-                    @endif
-                </tfoot>
-            </table>
+                            $displayName = $displayName ?? ($item->name ?? "Service Item");
+                        @endphp
+                        <tr>
+                            <td style="border-bottom:1px solid #f8fafc; font-size:15px; font-weight:bold; color:#334155;">{{ $displayName }}</td>
+                            <td align="center" style="border-bottom:1px solid #f8fafc; color:#64748b;">{{ $item->quantity }}</td>
+                            <td align="right" style="border-bottom:1px solid #f8fafc; font-weight:bold; color:#1e293b;">Rp {{ number_format($item->price, 0, ',', '.') }}</td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                    <tfoot style="background-color:#fcfcfc;">
+                        <tr>
+                            <td colspan="2" align="right" style="padding-top:20px; color:#64748b; font-size:14px;">Grand Total:</td>
+                            <td align="right" style="padding-top:20px; font-size:22px; font-weight:900; color:#1e293b;">Rp {{ number_format($totalAmount, 0, ',', '.') }}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" align="right" style="color:#16a34a; font-size:14px;">Total Paid:</td>
+                            <td align="right" style="font-size:16px; font-weight:bold; color:#16a34a;">Rp {{ number_format($paidAmount, 0, ',', '.') }}</td>
+                        </tr>
+                        @if($isPartial && !$isFailed)
+                        <tr>
+                            <td colspan="2" align="right" style="color:#f59e0b; font-size:14px;">Remaining Balance:</td>
+                            <td align="right" style="font-size:16px; font-weight:bold; color:#f59e0b;">Rp {{ number_format($totalAmount - $paidAmount, 0, ',', '.') }}</td>
+                        </tr>
+                        @endif
+                    </tfoot>
+                </table>
+            </div>
 
             {{-- GUIDELINES BLOCK --}}
-            <div style="padding:15px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; margin-top:10px;">
-                <p style="margin:0 0 8px; font-size:11px; color:#1e293b; font-weight:bold; text-transform:uppercase;">Rental Guidelines:</p>
-                <ul style="margin:0; padding:0 0 0 15px; font-size:11px; color:#475569; line-height:1.5;">
+            <div style="padding:20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin-top:30px;">
+                <p style="margin:0 0 10px; font-size:12px; color:#1e293b; font-weight:bold; text-transform:uppercase;">Important Guidelines:</p>
+                <ul style="margin:0; padding:0 0 0 20px; font-size:12px; color:#475569; line-height:1.6;">
                     @if($bookable instanceof CarRental)
-                        <li><strong>Driver Included:</strong> A professional driver is provided for your entire trip duration.</li>
-                        <li><strong>Fuel & Extra Costs:</strong> Fuel, parking fees, and tolls are to be covered by the guest unless otherwise specified.</li>
-                        <li><strong>Driver Meals:</strong> It is customary to provide meals or a small allowance for the driver during travel.</li>
-                        <li><strong>Overtime:</strong> Use exceeding the agreed duration is charged at 10% of the daily rate per hour.</li>
+                        <li><strong>Driver:</strong> A professional driver is included for the duration.</li>
+                        <li><strong>Extras:</strong> Fuel, parking, and tolls are not included unless stated.</li>
+                        <li><strong>Overtime:</strong> Charged at 10% of the daily rate per hour.</li>
                     @else
-                        <li>Please be ready 15 minutes before the scheduled time.</li>
-                        <li>Ensure you have your digital receipt or ID ready for verification.</li>
+                        <li>Please arrive at the meeting point 15 minutes early.</li>
+                        <li>Have your booking ID (#{{ $order->order_number }}) ready for check-in.</li>
                     @endif
                 </ul>
             </div>
-
-            @if($isFailed)
-            <div style="padding:15px; background:#fef2f2; border-left:4px solid #ef4444; border-radius:4px; margin-top:10px;">
-                <p style="margin:0; font-size:12px; color:#b91c1c;">
-                    <strong>Payment Alert:</strong> This transaction has been cancelled or failed. Please contact our support team or create a new booking if you would like to proceed.
-                </p>
-            </div>
-            @endif
         </td>
     </tr>
 
-    {{-- WHATSAPP CONTACT SECTION --}}
+    {{-- WHATSAPP CONTACT FOOTER --}}
     <tr>
-        <td style="background:#f0fdf4; padding:25px; border-top:1px solid #dcfce7; text-align:center;">
-            <p style="margin:0 0 12px; font-size:13px; font-weight:bold; color:#166534; line-height:1.4;">
-                Make sure your WhatsApp can be contacted if you cannot contact us here using WhatsApp
+        <td style="background:#f0fdf4; padding:40px; border-top:1px solid #dcfce7; text-align:center;">
+            <p style="margin:0 0 20px; font-size:15px; font-weight:bold; color:#166534; line-height:1.5;">
+                We will contact you via WhatsApp for final coordination.<br>Please ensure your number is reachable.
             </p>
-            <a href="{{ $waUrl }}" style="display:inline-block; background:#25D366; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:13px;">
-                Update WhatsApp Number
+            <a href="{{ $waUrl }}" style="display:inline-block; background:#25D366; color:#ffffff; padding:16px 35px; text-decoration:none; border-radius:50px; font-weight:bold; font-size:15px; box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);">
+                Verify WhatsApp Number
             </a>
         </td>
     </tr>
