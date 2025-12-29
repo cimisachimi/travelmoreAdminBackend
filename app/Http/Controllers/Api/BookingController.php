@@ -26,8 +26,29 @@ use App\Models\OpenTrip;
 class BookingController extends Controller
 {
     /**
+     * Helper untuk mengambil data profil user sebagai cadangan jika input kosong.
+     */
+    private function resolveUserDetail(Request $request, $user)
+    {
+        $details = [
+            'full_name'    => $request->input('full_name') ?? $user->full_name ?? $user->name,
+            'email'        => $request->input('email') ?? $user->email,
+            'phone_number' => $request->input('phone_number') ?? $user->phone_number,
+            'nationality'  => $request->input('participant_nationality') ?? $user->nationality,
+        ];
+
+        // Opsional: Validasi manual jika data penting tetap kosong setelah fallback
+        if (!$details['nationality']) {
+            throw ValidationException::withMessages([
+                'participant_nationality' => ['Kewarganegaraan diperlukan. Silakan lengkapi profil Anda atau isi di form ini.']
+            ]);
+        }
+
+        return $details;
+    }
+
+    /**
      * 💰 CHECK PRICE & DISCOUNT ENDPOINT
-     * Call this from the frontend "Apply Code" button to preview totals.
      */
     public function checkPrice(Request $request)
     {
@@ -35,13 +56,11 @@ class BookingController extends Controller
             'type' => 'required|string|in:car_rental,activity,holiday_package,open_trip,trip_planner',
             'id'   => 'required|integer',
             'discount_code' => 'nullable|string|exists:discount_codes,code',
-
-            // Contextual inputs based on type
             'start_date' => 'nullable|date',
             'end_date'   => 'nullable|date',
-            'quantity'   => 'nullable|integer|min:1', // Activity Pax
-            'adults'     => 'nullable|integer|min:1', // Package/Trip Pax
-            'children'   => 'nullable|integer|min:0', // Package/Trip Pax
+            'quantity'   => 'nullable|integer|min:1',
+            'adults'     => 'nullable|integer|min:1',
+            'children'   => 'nullable|integer|min:0',
             'selected_addons' => 'nullable|array'
         ]);
 
@@ -49,7 +68,6 @@ class BookingController extends Controller
             $subtotal = 0;
             $itemName = '';
 
-            // 1. Calculate Subtotal based on Type
             switch ($validated['type']) {
                 case 'car_rental':
                     $car = CarRental::findOrFail($validated['id']);
@@ -66,7 +84,6 @@ class BookingController extends Controller
                     $subtotal = $activity->price * $qty;
                     $itemName = "{$activity->name} ({$qty} Pax)";
 
-                    // Activity Add-ons
                     if (!empty($validated['selected_addons'])) {
                         $availableAddons = collect($activity->addons ?? []);
                         foreach ($validated['selected_addons'] as $addonName) {
@@ -79,14 +96,12 @@ class BookingController extends Controller
                 case 'holiday_package':
                     $pkg = HolidayPackage::findOrFail($validated['id']);
                     $pax = ($validated['adults'] ?? 1) + ($validated['children'] ?? 0);
-                    // Use model helper for tiered pricing if available, else base price
                     $pricePerPax = method_exists($pkg, 'getPricePerPax') ? $pkg->getPricePerPax($pax) : $pkg->price;
                     if (!$pricePerPax) throw new \Exception("Pricing unavailable for this pax count");
 
                     $subtotal = $pricePerPax * $pax;
                     $itemName = "{$pkg->name} ({$pax} Pax)";
 
-                    // Package Add-ons
                     if (!empty($validated['selected_addons'])) {
                         $availableAddons = collect($pkg->addons ?? []);
                         foreach ($validated['selected_addons'] as $addonName) {
@@ -102,7 +117,6 @@ class BookingController extends Controller
                     $subtotal = $trip->starting_from_price * $pax;
                     $itemName = "{$trip->name} ({$pax} Pax)";
 
-                    // Open Trip Add-ons
                     if (!empty($validated['selected_addons'])) {
                         $availableAddons = collect($trip->addons ?? []);
                         foreach ($validated['selected_addons'] as $addonName) {
@@ -119,7 +133,6 @@ class BookingController extends Controller
                     break;
             }
 
-            // 2. Calculate Discount
             $discountAmount = 0;
             $codeDetails = null;
 
@@ -151,30 +164,30 @@ class BookingController extends Controller
     }
 
     /**
-     * Store a newly created CAR RENTAL booking.
+     * Store CAR RENTAL booking.
      */
     public function storeCarRentalBooking(Request $request, CarRental $carRental)
     {
         $validated = $request->validate([
             'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
-            'phone_number'    => 'required|string|max:20',
+            'phone_number'    => 'nullable|string|max:20', // ✅ Diubah ke nullable
             'pickup_location' => 'required|string|max:255',
             'pickup_time'     => 'required|date_format:H:i',
-            'discount_code'   => 'nullable|string|exists:discount_codes,code', // ✅ Added
-            // Add-ons for cars if you implement them later
+            'discount_code'   => 'nullable|string|exists:discount_codes,code',
             'selected_addons' => 'nullable|array',
         ]);
 
+        $user = Auth::user();
+        $userData = $this->resolveUserDetail($request, $user);
+
         $startDate = Carbon::parse($validated['start_date']);
         $endDate = Carbon::parse($validated['end_date']);
-        $user = Auth::user();
 
         if ($carRental->status !== 'available') {
             return response()->json(['message' => 'This car is not available for booking.'], 422);
         }
 
-        // Check Conflicts
         $conflictingDates = CarRentalAvailability::where('car_rental_id', $carRental->id)
             ->whereBetween('date', [$startDate, $endDate])
             ->whereIn('status', ['booked', 'maintenance'])
@@ -192,7 +205,6 @@ class BookingController extends Controller
             $pricePerDay = $carRental->price_per_day;
             $baseSubtotal = $pricePerDay * $requestedDays;
 
-            // ✅ Calculate Add-ons (If car has add-ons)
             $addonsTotal = 0;
             $selectedAddonsDetails = [];
             if (!empty($validated['selected_addons']) && !empty($carRental->addons)) {
@@ -209,7 +221,6 @@ class BookingController extends Controller
 
             $grossSubtotal = $baseSubtotal + $addonsTotal;
 
-            // ✅ Apply Discount
             $discountAmount = 0;
             $discountCodeId = null;
             $discountCode = null;
@@ -226,7 +237,6 @@ class BookingController extends Controller
             $downPayment = $totalPrice * 0.5;
             $paymentDeadline = Carbon::now()->addHours(2);
 
-            // Create Order
             $order = Order::create([
                 'user_id' => $user->id,
                 'order_number' => 'ORD-CAR-' . strtoupper(Str::random(6)) . time(),
@@ -239,14 +249,13 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // Create Order Items
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $carRental->id,
                 'orderable_type' => CarRental::class,
                 'name' => $carRental->brand . ' ' . $carRental->car_model,
                 'quantity' => $requestedDays,
-                'price' => $baseSubtotal, // Price for car rental only
+                'price' => $baseSubtotal,
             ]);
 
             foreach ($selectedAddonsDetails as $addon) {
@@ -260,7 +269,6 @@ class BookingController extends Controller
                 ]);
             }
 
-            // Create Booking
             $booking = new Booking([
                 'user_id' => $user->id,
                 'status' => 'pending',
@@ -275,7 +283,9 @@ class BookingController extends Controller
                     'brand'         => $carRental->brand,
                     'price_per_day' => $carRental->price_per_day,
                     'total_days'    => $requestedDays,
-                    'phone_number'    => $validated['phone_number'],
+                    'full_name'       => $userData['full_name'], // ✅ Fallback
+                    'phone_number'    => $userData['phone_number'], // ✅ Fallback
+                    'email'           => $userData['email'], // ✅ Fallback
                     'pickup_location' => $validated['pickup_location'],
                     'pickup_time'     => $validated['pickup_time'],
                     'selected_addons' => $selectedAddonsDetails,
@@ -287,12 +297,10 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            // Increment Discount Usage
             if ($discountCode) {
                 $discountCode->increment('uses');
             }
 
-            // Update Availability
             $period = CarbonPeriod::create($startDate, $endDate);
             foreach ($period as $date) {
                 CarRentalAvailability::updateOrCreate(
@@ -325,15 +333,15 @@ class BookingController extends Controller
             'booking_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'activity_time' => 'required|string',
             'quantity' => 'required|integer|min:1',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
+            'participant_nationality' => 'nullable|string|max:100', // ✅ Diubah ke nullable
+            'full_name' => 'nullable|string|max:255', // ✅ Diubah ke nullable
+            'email' => 'nullable|email|max:255', // ✅ Diubah ke nullable
+            'phone_number' => 'nullable|string|max:20', // ✅ Diubah ke nullable
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
             'selected_addons' => 'nullable|array',
             'selected_addons.*' => 'string',
-            'discount_code' => 'nullable|string|exists:discount_codes,code', // ✅ Added
+            'discount_code' => 'nullable|string|exists:discount_codes,code',
         ]);
 
         if ($activity->status !== 'active') {
@@ -341,11 +349,12 @@ class BookingController extends Controller
         }
 
         $user = Auth::user();
+        $userData = $this->resolveUserDetail($request, $user);
+
         $totalPax = $validated['quantity'];
         $pricePerPax = $activity->price;
         $baseSubtotal = $pricePerPax * $totalPax;
 
-        // ✅ Calculate Add-ons
         $addonsTotal = 0;
         $selectedAddonsDetails = [];
 
@@ -363,7 +372,6 @@ class BookingController extends Controller
 
         $grossSubtotal = $baseSubtotal + $addonsTotal;
 
-        // ✅ Apply Discount
         $discountAmount = 0;
         $discountCodeId = null;
         $discountCode = null;
@@ -395,17 +403,15 @@ class BookingController extends Controller
                 'down_payment_amount' => $downPayment,
             ]);
 
-            // Item 1: Main Activity
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $activity->id,
                 'orderable_type' => Activity::class,
                 'name' => $activity->name,
                 'quantity' => $validated['quantity'],
-                'price' => $baseSubtotal, // Price of activity only
+                'price' => $baseSubtotal,
             ]);
 
-             // Item 2+: Add-ons
              foreach ($selectedAddonsDetails as $addon) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -425,10 +431,10 @@ class BookingController extends Controller
                 'booking_date' => $validated['booking_date'],
                 'start_date' => $validated['booking_date'],
                 'details' => [
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
+                    'full_name' => $userData['full_name'], // ✅ Fallback
+                    'email' => $userData['email'], // ✅ Fallback
+                    'phone_number' => $userData['phone_number'], // ✅ Fallback
+                    'participant_nationality' => $userData['nationality'], // ✅ Fallback
                     'quantity' => $validated['quantity'],
                     'activity_time' => $validated['activity_time'],
                     'pickup_location' => $validated['pickup_location'],
@@ -473,10 +479,10 @@ class BookingController extends Controller
             'adults' => 'required|integer|min:1',
             'children' => 'sometimes|integer|min:0',
             'discount_code' => 'nullable|string|exists:discount_codes,code',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
+            'participant_nationality' => 'nullable|string|max:100', // ✅ Diubah ke nullable
+            'full_name' => 'nullable|string|max:255', // ✅ Diubah ke nullable
+            'email' => 'nullable|email|max:255', // ✅ Diubah ke nullable
+            'phone_number' => 'nullable|string|max:20', // ✅ Diubah ke nullable
             'pickup_location' => 'required|string|max:255',
             'flight_number' => 'nullable|string|max:50',
             'special_request' => 'nullable|string',
@@ -485,8 +491,9 @@ class BookingController extends Controller
         ]);
 
         $user = Auth::user();
-        $package = HolidayPackage::findOrFail($packageId);
+        $userData = $this->resolveUserDetail($request, $user);
 
+        $package = HolidayPackage::findOrFail($packageId);
         $adultsCount = $validated['adults'];
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
@@ -554,10 +561,10 @@ class BookingController extends Controller
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
+                    'full_name' => $userData['full_name'], // ✅ Fallback
+                    'email' => $userData['email'], // ✅ Fallback
+                    'phone_number' => $userData['phone_number'], // ✅ Fallback
+                    'participant_nationality' => $userData['nationality'], // ✅ Fallback
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
@@ -576,7 +583,6 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            // Order Items
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $package->id,
@@ -621,10 +627,10 @@ class BookingController extends Controller
             'adults' => 'required|integer|min:1',
             'children' => 'sometimes|integer|min:0',
             'discount_code' => 'nullable|string|exists:discount_codes,code',
-            'participant_nationality' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone_number' => 'required|string|max:20',
+            'participant_nationality' => 'nullable|string|max:100', // ✅ Diubah ke nullable
+            'full_name' => 'nullable|string|max:255', // ✅ Diubah ke nullable
+            'email' => 'nullable|email|max:255', // ✅ Diubah ke nullable
+            'phone_number' => 'nullable|string|max:20', // ✅ Diubah ke nullable
             'pickup_location' => 'required|string|max:255',
             'special_request' => 'nullable|string',
             'selected_addons' => 'nullable|array',
@@ -632,8 +638,9 @@ class BookingController extends Controller
         ]);
 
         $user = Auth::user();
-        $trip = OpenTrip::findOrFail($openTripId);
+        $userData = $this->resolveUserDetail($request, $user);
 
+        $trip = OpenTrip::findOrFail($openTripId);
         $adultsCount = $validated['adults'];
         $childrenCount = $validated['children'] ?? 0;
         $totalPax = $adultsCount + $childrenCount;
@@ -701,12 +708,12 @@ class BookingController extends Controller
                 'total_price' => $totalPrice,
                 'payment_status' => 'unpaid',
                 'details' => [
-                    'start_date' => $validated['start_date'], // ✅ Add this
-                    'end_date'   => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(), // ✅ Add this
-                    'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
-                    'phone_number' => $validated['phone_number'],
-                    'participant_nationality' => $validated['participant_nationality'],
+                    'start_date' => $validated['start_date'],
+                    'end_date'   => Carbon::parse($validated['start_date'])->addDays($trip->duration - 1)->toDateString(),
+                    'full_name' => $userData['full_name'], // ✅ Fallback
+                    'email' => $userData['email'], // ✅ Fallback
+                    'phone_number' => $userData['phone_number'], // ✅ Fallback
+                    'participant_nationality' => $userData['nationality'], // ✅ Fallback
                     'adults' => $adultsCount,
                     'children' => $childrenCount,
                     'total_pax' => $totalPax,
@@ -724,7 +731,6 @@ class BookingController extends Controller
             $order->booking_id = $booking->id;
             $order->save();
 
-            // Order Items
             OrderItem::create([
                 'order_id' => $order->id,
                 'orderable_id' => $trip->id,
@@ -762,13 +768,10 @@ class BookingController extends Controller
     /**
      * Store TRIP PLANNER Booking
      */
-    /**
-     * Store TRIP PLANNER Booking
-     */
     public function storeTripPlannerBooking(Request $request)
     {
         $validated = $request->validate([
-            'id' => 'required|integer|exists:trip_planners,id', // ✅ Ensure we know which plan to book
+            'id' => 'required|integer|exists:trip_planners,id',
             'discount_code' => 'nullable|string|exists:discount_codes,code'
         ]);
 
@@ -802,8 +805,6 @@ class BookingController extends Controller
         }
 
         $totalPrice = max(0, $subtotal - $discountAmount);
-
-        // ✅ CHANGED: Require full payment immediately (100% of total)
         $downPayment = $totalPrice;
 
         $paymentDeadline = Carbon::now()->addHours(2);
