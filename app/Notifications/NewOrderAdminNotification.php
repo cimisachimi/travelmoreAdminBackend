@@ -15,41 +15,47 @@ class NewOrderAdminNotification extends Notification implements ShouldQueue
 
     protected $order;
 
+    /**
+     * Create a new notification instance.
+     */
     public function __construct(Order $order)
     {
+        // Memuat relasi agar data lengkap saat diproses oleh Queue (Antrean)
         $this->order = $order->load(['user', 'booking.bookable', 'orderItems.orderable']);
     }
 
+    /**
+     * Get the notification's delivery channels.
+     */
     public function via(object $notifiable): array
     {
         return ['mail'];
     }
 
+    /**
+     * Get the mail representation of the notification.
+     */
     public function toMail(object $notifiable): MailMessage
     {
-        $totalFormatted = number_format($this->order->total_amount, 0, ',', '.');
-        $paidFormatted = number_format($this->order->paid_amount, 0, ',', '.');
-        $booking = $this->order->booking;
+        // Menggunakan view Blade khusus admin yang sudah kita buat sebelumnya
+        // Subject menggunakan Bahasa Indonesia
+        return (new MailMessage)
+            ->subject('🚨 Pesanan Baru Diterima: #' . $this->order->order_number)
+            ->view('emails.admin.new_order', [
+                'order' => $this->order
+            ]);
+    }
 
-        $mail = (new MailMessage)
-            ->subject('New Payment Received: Order #' . $this->order->order_number)
-            ->greeting('Hello Admin,')
-            ->line('A new payment has been processed for **' . $this->order->user->name . '**.')
-            ->line('---')
-            ->line('### Order Details')
-            ->line('**Order Number:** ' . $this->order->order_number)
-            ->line('**Total Amount:** Rp ' . $totalFormatted)
-            ->line('**Amount Paid:** Rp ' . $paidFormatted);
-
-        // Menambahkan rincian item untuk admin
-        $mail->line('---')->line('**Items Purchased:**');
-        foreach ($this->order->orderItems as $item) {
-            $name = $item->orderable->name ?? $item->orderable->title ?? 'Service';
-            $mail->line("- {$name} (x{$item->quantity}): Rp " . number_format($item->price, 0, ',', '.'));
-        }
-
-        return $mail
-            ->action('View All Orders', 'https://api.travelmore.travel/admin/orders')
-            ->line('Please check the dashboard for management.');
+    /**
+     * Get the array representation of the notification.
+     */
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'order_id' => $this->order->id,
+            'order_number' => $this->order->order_number,
+            'amount' => $this->order->total_amount,
+            'user_name' => $this->order->user->name,
+        ];
     }
 }
