@@ -14,35 +14,35 @@ class OrderController extends Controller
      *
      * This is the main endpoint for the "Purchase History" page.
      */
-    public function index()
-    {
-        $user = Auth::user();
+public function index()
+{
+    $user = Auth::user();
+    $orders = Order::with([
+            'user',                  // 👈 Added to fix the 'undefined' error
+            'booking.bookable',
+            'orderItems.orderable',  // 👈 Added for the items table
+            'transaction',           // 👈 Added for payment details
+            'discountCode'
+        ])
+        ->where('user_id', $user->id)
+        ->latest()
+        ->get();
 
-        // ✅ FIXED: Added 'discountCode' to eager loading
-        $orders = Order::with([
-                'booking.bookable',
-                'transactions',
-                'discountCode'
-            ])
-            ->where('user_id', $user->id)
-            ->latest()
-            ->get();
+    return response()->json($orders);
+}
 
-        return response()->json($orders);
-    }
+public function show($id)
+{
+    $user = Auth::user();
+    $order = Order::with([
+            'booking.bookable',
+            'transactions',
+            'discountCode',
+            'orderItems.orderable' // 👈 Added this to match Admin logic
+        ])
+        ->where('user_id', $user->id)
+        ->findOrFail($id);
 
-    /**
-     * 🧠 Show a specific order.
-     */
-    public function show($id)
-    {
-        $user = Auth::user();
-
-        // ✅ FIXED: Added 'discountCode' to eager loading
-        $order = Order::with(['booking.bookable', 'transactions', 'discountCode'])
-            ->where('user_id', $user->id)
-            ->findOrFail($id);
-
-        return response()->json($order);
-    }
+    return response()->json($order);
+}
 }

@@ -871,23 +871,37 @@ class BookingController extends Controller
         }
     }
 
-    public function index()
-    {
-        $bookings = Booking::with(['bookable', 'order'])
-            ->where('user_id', Auth::id())
-            ->latest()
-            ->get();
-        return response()->json($bookings);
+    // app/Http/Controllers/Api/BookingController.php
+
+public function index()
+{
+    $bookings = Booking::with([
+            'bookable',
+            'order.transactions',       // 👈 Load transaction history
+            'order.orderItems.orderable' // 👈 Load item details
+        ])
+        ->where('user_id', Auth::id())
+        ->latest()
+        ->get();
+
+    return response()->json($bookings);
+}
+
+public function show(Booking $booking)
+{
+    if ($booking->user_id !== Auth::id()) {
+        return response()->json(['message' => 'Unauthorized'], 403);
     }
 
-    public function show(Booking $booking)
-    {
-        if ($booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        $booking->load('bookable', 'order.transaction');
-        return response()->json($booking);
-    }
+    $booking->load([
+        'bookable',
+        'order.transaction',         // 👈 Main payment
+        'order.transactions',        // 👈 Refund/History
+        'order.orderItems.orderable' // 👈 Details of the service
+    ]);
+
+    return response()->json($booking);
+}
 
     public function update(Request $request, Booking $booking)
     {
