@@ -22,7 +22,7 @@ class ActivitySeeder extends Seeder
             // --- Activity 1: Snorkeling Adventure ---
             $act1 = Activity::create([
                 'price' => 350000,
-                'status' => 'active',
+                'status' => 'inactive',
                 'duration' => '3 Hours',
                 // ✅ ADD ADDONS JSON DATA
                 'addons' => [
